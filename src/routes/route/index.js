@@ -13,11 +13,16 @@ routeRouter.get("/v1/driving/:routeParams", async (req, res) => {
         delete query.hints
     }
 
-    const routing = await axios.get(url, {
-        params: query
-    })
+    try {
+        const routing = await axios.get(url, {
+            params: query
+        })
 
-    res.send(routing.data)
+        res.send(routing.data)
+    } catch (error) {
+        console.error(error.message)
+        res.status(404).send()
+    }
 });
 
 module.exports = routeRouter

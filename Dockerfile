@@ -1,9 +1,10 @@
-FROM alpine:3.19
+FROM ghcr.io/project-osrm/osrm-backend:v5.27.1
 
-RUN mkdir /src
+RUN mkdir -p /src
 COPY package.json /src
 
-RUN apk add --no-cache npm && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends npm && \
     cd /src && \
     npm install
 
