@@ -12,7 +12,9 @@
   "dependencies": {
     "axios": "^1.7.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "cross-env": "^7.0.3",
+    "express": "^4.19.2",
+    "supertest": "^7.0.0"
   },
   "devDependencies": {
     "jest": "^29.7.0"

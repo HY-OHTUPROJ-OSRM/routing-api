@@ -1,7 +1,8 @@
 const PORT = process.env.PORT || 3003
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000"
-
+const DB = process.env.DATABASE || ""
 module.exports = {
     PORT,
-    BACKEND_URL
+    BACKEND_URL,
+    DB
 }
