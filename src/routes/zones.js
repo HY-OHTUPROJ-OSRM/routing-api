@@ -8,4 +8,15 @@ zoneRouter.get("/", async (req, res) => {
     res.json(zones)
 });
 
+zoneRouter.post("/", async (req, res) => {
+    const featureCollection = req.body
+
+    try {
+        await ZoneService.createZones(featureCollection)
+        res.status(201).send()
+    } catch (error) {
+        res.status(400).send(error.message)
+    }
+})
+
 module.exports = zoneRouter
