@@ -7,7 +7,7 @@ input=$5
 
 create_sql="
 CREATE TABLE zones (
-	id SERIAL PRIMARY KEY, geom GEOMETRY(POLYGON, 3857)
+	id SERIAL PRIMARY KEY, type TEXT, name TEXT, geom GEOMETRY(POLYGON, 3857)
 );
 CREATE INDEX sidx_zones_geom ON zones USING GIST(geom);
 "
