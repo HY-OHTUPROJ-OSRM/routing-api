@@ -1,6 +1,6 @@
 const axios = require("axios");
 const { Router } = require("express")
-const { BACKEND_URL } = require("../../utils/config")
+const { BACKEND_URL } = require("../utils/config")
 
 const routeRouter = Router()
 
