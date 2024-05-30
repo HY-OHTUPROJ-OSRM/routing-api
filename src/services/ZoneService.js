@@ -28,35 +28,44 @@ class ZoneService {
                 + zoneGeometries.length + zoneGeometries.flat().length
                 + paths.length + 2 * paths.flat().length)
         const input = Buffer.alloc(inputSize)
-
         let offset = 0
+
+        const writeCount = async (n) => {
+            offset = input.writeBigInt64LE(BigInt(n), offset)
+        }
+
+        const writeNodeId = writeCount
+
+        const writeVertex = async (x, y) => {
+            offset = input.writeInt32LE(x, offset)
+            offset = input.writeInt32LE(y, offset)
+        }
 
         /* Construct intersection program input.
          * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
-        offset = input.writeBigInt64LE(BigInt(zoneGeometries.length), offset)
-        offset = input.writeBigInt64LE(BigInt(paths.length), offset)
+
+        writeCount(zoneGeometries.length)
+        writeCount(paths.length)
 
         /* Polygons */
         for (const polygon of zoneGeometries) {
-            offset = input.writeBigInt64LE(BigInt(polygon.length), offset)
+            writeCount(polygon.length)
 
             for (const vert of polygon) {
-                offset = input.writeInt32LE(vert[0] * 10000000, offset)
-                offset = input.writeInt32LE(vert[1] * 10000000, offset)
+                writeVertex(vert[0] * 10000000, vert[1] * 10000000)
             }
         }
 
         /* Paths. */
         for (const path of paths) {
-            offset = input.writeBigInt64LE(BigInt(path.length), offset)
+            writeCount(path.length)
 
             for (const vert of path) {
-                offset = input.writeInt32LE(vert.lat, offset)
-                offset = input.writeInt32LE(vert.lon, offset)
+                writeVertex(vert.lat, vert.lon)
             }
 
             for (const vert of path) {
-                offset = input.writeBigInt64LE(BigInt(vert.id), offset)
+                writeNodeId(vert.id)
             }
         }
 
