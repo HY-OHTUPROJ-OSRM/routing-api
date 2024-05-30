@@ -30,13 +30,13 @@ class ZoneService {
         const input = Buffer.alloc(inputSize)
         let offset = 0
 
-        const writeCount = async (n) => {
+        const writeCount = (n) => {
             offset = input.writeBigInt64LE(BigInt(n), offset)
         }
 
         const writeNodeId = writeCount
 
-        const writeVertex = async (x, y) => {
+        const writeVertex = (x, y) => {
             offset = input.writeInt32LE(x, offset)
             offset = input.writeInt32LE(y, offset)
         }
