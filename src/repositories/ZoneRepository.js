@@ -27,7 +27,7 @@ class ZoneRepository {
         `
     }
 
-    static async getOverlappingPaths(zoneId) {
+    static async getOverlappingPaths(zoneIds) {
         const result = await sql`
             SELECT w.id way_id, ARRAY_AGG(n.id) node_ids,
                 ARRAY_AGG(n.lat) node_latitudes,
@@ -35,7 +35,7 @@ class ZoneRepository {
             FROM planet_osm_nodes AS n, (
                     SELECT osm_id, name, (ST_Dump(ST_Intersection(l.way, z.geom))).geom clip
                     FROM planet_osm_line AS l, zones AS z
-                    WHERE z.id=${zoneId}
+                    WHERE z.id=ANY(${zoneIds}::int[])
                 ) AS q
             INNER JOIN planet_osm_ways AS w ON q.osm_id=w.id
             WHERE ST_Dimension(q.clip)=1 AND n.id=ANY(w.nodes)
