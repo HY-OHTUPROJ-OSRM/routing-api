@@ -26,6 +26,28 @@ class ZoneRepository {
             )
         `
     }
+
+    static async getOverlappingPaths(zoneId) {
+        const result = await sql`
+            SELECT w.id way_id, ARRAY_AGG(n.id) node_ids,
+                ARRAY_AGG(n.lat) node_latitudes,
+                ARRAY_AGG(n.lon) node_longitudes
+            FROM planet_osm_nodes AS n, (
+                    SELECT osm_id, name, (ST_Dump(ST_Intersection(l.way, z.geom))).geom clip
+                    FROM planet_osm_line AS l, zones AS z
+                    WHERE z.id=${zoneId}
+                ) AS q
+            INNER JOIN planet_osm_ways AS w ON q.osm_id=w.id
+            WHERE ST_Dimension(q.clip)=1 AND n.id=ANY(w.nodes)
+            GROUP BY w.id;
+        `
+
+        return result.map(
+            row => row.node_ids.map(
+                (id, i) => ({ id: id, lat: row.node_latitudes[i], lon: row.node_longitudes[i] })
+            )
+        )
+    }
 }
 
 module.exports = ZoneRepository
