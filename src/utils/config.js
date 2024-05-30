@@ -1,5 +1,6 @@
 const PORT = process.env.PORT || 3000
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000"
+const SRID = process.env.SRID || "3857"
 const DATABASE_HOST = process.env.DATABASE_HOST || ""
 const DATABASE_PORT = process.env.DATABASE_PORT || ""
 const DATABASE_DB = process.env.DATABASE_DB || ""
@@ -9,6 +10,7 @@ const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || ""
 module.exports = {
     PORT,
     BACKEND_URL,
+    SRID,
     DATABASE_HOST,
     DATABASE_PORT,
     DATABASE_DB,
