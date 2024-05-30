@@ -21,24 +21,29 @@ class ZoneService {
         })
     }
 
-    static async waysOverlappingZone(zoneId, zoneVertices) {
-        const paths = await ZoneRepository.getOverlappingPaths(zoneId)
+    static async waysOverlappingZone(zoneIds, zoneGeometries) {
+        const paths = await ZoneRepository.getOverlappingPaths(zoneIds)
 
-        const inputSize = 8 * (3 + zoneVertices.length + paths.length + paths.flat().length * 2)
+        const inputSize = 8 * (2
+                + zoneGeometries.length + zoneGeometries.flat().length
+                + paths.length + 2 * paths.flat().length)
         const input = Buffer.alloc(inputSize)
 
         let offset = 0
 
         /* Construct intersection program input.
          * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
-        offset = input.writeBigInt64LE(BigInt(1), offset) /* Number of polygons. */
+        offset = input.writeBigInt64LE(BigInt(zoneGeometries.length), offset)
         offset = input.writeBigInt64LE(BigInt(paths.length), offset)
-        offset = input.writeBigInt64LE(BigInt(zoneVertices.length), offset)
 
-        /* Polygon vertices. */
-        for (const vert of zoneVertices) {
-            offset = input.writeInt32LE(vert[0], offset)
-            offset = input.writeInt32LE(vert[1], offset)
+        /* Polygons */
+        for (const polygon of zoneGeometries) {
+            offset = input.writeBigInt64LE(BigInt(polygon.length), offset)
+
+            for (const vert of polygon) {
+                offset = input.writeInt32LE(vert[0] * 10000000, offset)
+                offset = input.writeInt32LE(vert[1] * 10000000, offset)
+            }
         }
 
         /* Paths. */
