@@ -24,7 +24,7 @@ class ZoneService {
     /* zoneIds:        Array of the databse ids of the zones.
      * zoneGeometries: Array of arrays of latitude-longitude
      *                 pairs representing the geometries of
-     *                 the zones (SRID 4325).
+     *                 the zones (SRID 4326).
      * returns:        Array of pairs of node ids
      *                 corresponding to the overlapping road
      *                 segments. */
