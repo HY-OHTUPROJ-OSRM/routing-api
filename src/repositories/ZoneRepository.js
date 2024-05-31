@@ -17,14 +17,16 @@ class ZoneRepository {
     }
 
     static async createZone(zone) {
-        await sql`
+        const result = await sql`
             INSERT INTO zones (type, name, geom)
             VALUES (
                 ${zone.properties.type},
                 ${zone.properties.name},
                 ST_Transform(St_GeomFromGeoJSON(${JSON.stringify(zone.geometry)}), 3857)
             )
+            RETURNING id;
         `
+        return result.map(row => row.id)
     }
 
     static async getOverlappingPaths(zoneIds) {
@@ -33,7 +35,7 @@ class ZoneRepository {
                 ARRAY_AGG(n.lat) node_latitudes,
                 ARRAY_AGG(n.lon) node_longitudes
             FROM planet_osm_nodes AS n, (
-                    SELECT osm_id, name, (ST_Dump(ST_Intersection(l.way, z.geom))).geom clip
+                    SELECT osm_id, (ST_Dump(ST_Intersection(l.way, z.geom))).geom clip
                     FROM planet_osm_line AS l, zones AS z
                     WHERE z.id=ANY(${zoneIds}::int[])
                 ) AS q
