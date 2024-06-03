@@ -29,9 +29,9 @@ zoneRouter.post("/", async (req, res) => {
     res.status(201).send()
 
     const zoneGeometries = featureCollection.features.map(
-        feature => feature.geometry.coordinates
+        feature => feature.geometry.coordinates[0]
     )
-    const overlappingSegments = await ZoneService.getOverlappingWays(zoneIds, zoneGeometries)
+    const overlappingSegments = await ZoneService.waysOverlappingZone(zoneIds, zoneGeometries)
 
     ZoneService.blockSegments(overlappingSegments)
 })
