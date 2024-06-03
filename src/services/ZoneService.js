@@ -47,9 +47,13 @@ class ZoneService {
             throw Error(errors[0])
         }
 
-        featureCollection.features.forEach(async (feature) => {
-            await ZoneRepository.createZone(feature)
-        })
+        const ids = []
+
+        for (const feature of featureCollection.features) {
+            ids.push(await ZoneRepository.createZone(feature))
+        }
+
+        return ids
     }
 
     /* zoneIds:        Array of the databse ids of the zones.
