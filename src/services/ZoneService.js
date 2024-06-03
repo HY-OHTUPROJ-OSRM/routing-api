@@ -103,7 +103,7 @@ class ZoneService {
             writeNumber(path.length)
 
             for (const vert of path) {
-                writeVertex(vert.lat, vert.lon)
+                writeVertex(vert.lon, vert.lat)
             }
 
             for (const vert of path) {
