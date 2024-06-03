@@ -56,6 +56,10 @@ class ZoneService {
         return ids
     }
 
+    static async deleteZone(id) {
+        await ZoneRepository.deleteZone(id)
+    }
+
     /* zoneIds:        Array of the databse ids of the zones.
      * zoneGeometries: Array of arrays of latitude-longitude
      *                 pairs representing the geometries of

@@ -29,6 +29,12 @@ class ZoneRepository {
         return result.map(row => row.id)
     }
 
+    static async deleteZone(id) {
+        await sql`
+            DELETE FROM zones WHERE id=${id}
+        `
+    }
+
     static async getOverlappingPaths(zoneIds) {
         const result = await sql`
             SELECT w.id way_id, ARRAY_AGG(n.id) node_ids,
