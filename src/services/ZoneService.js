@@ -34,6 +34,58 @@ function binaryWriter(stream) {
     }
 }
 
+async function polygonalIntersections(paths, zoneGeometries) {
+    const child = spawn("Polygonal-Intersections-CLI")
+    const { writeNumber, writeVertex, writeEnd } = binaryWriter(child.stdin)
+    const node_pairs = []
+    const result = new Promise((resolve, reject) => {
+        child.stdout.on("end", () => {
+            resolve(node_pairs)
+        })
+    })
+
+    child.stdout.on("readable", () => {
+        for (let to_read = child.stdout.readableLength; to_read >= 16; to_read -= 16) {
+            const pair = [0, 0]
+            pair[0] = child.stdout.read(8).readInt32LE()
+            pair[1] = child.stdout.read(8).readInt32LE()
+            node_pairs.push(pair)
+        }
+    })
+
+    /* Write intersection program input.
+     * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
+
+    writeNumber(zoneGeometries.length)
+    writeNumber(paths.length)
+
+    /* Polygons. */
+    for (const polygon of zoneGeometries) {
+        writeNumber(polygon.length)
+
+        for (const vert of polygon) {
+            writeVertex(vert[0] * 10000000, vert[1] * 10000000)
+        }
+    }
+
+    /* Paths. */
+    for (const path of paths) {
+        writeNumber(path.length)
+
+        for (const vert of path) {
+            writeVertex(vert.lon, vert.lat)
+        }
+
+        for (const vert of path) {
+            writeNumber(vert.id)
+        }
+    }
+
+    writeEnd()
+
+    return result
+}
+
 class ZoneService {
     static async getZones() {
         const zones = await ZoneRepository.getZones()
@@ -61,7 +113,7 @@ class ZoneService {
     }
 
     /* zoneIds:        Array of the databse ids of the zones.
-     * zoneGeometries: Array of arrays of latitude-longitude
+     * zoneGeometries: Array of arrays of longitude-latitude
      *                 pairs representing the geometries of
      *                 the zones (SRID 4326).
      * returns:        Array of pairs of node ids
@@ -69,55 +121,12 @@ class ZoneService {
      *                 segments. */
     static async waysOverlappingZone(zoneIds, zoneGeometries) {
         const paths = await ZoneRepository.getOverlappingPaths(zoneIds)
-        const child = spawn("Polygonal-Intersections-CLI")
-        const { writeNumber, writeVertex, writeEnd } = binaryWriter(child.stdin)
-        const node_pairs = []
-        const result = new Promise((resolve, reject) => {
-            child.stdout.on("end", () => {
-                resolve(node_pairs)
-            })
-        })
+        return await polygonalIntersections(paths, zoneGeometries)
+    }
 
-        child.stdout.on("readable", () => {
-            for (let to_read = child.stdout.readableLength; to_read >= 16; to_read -= 16) {
-                const pair = [0, 0]
-                pair[0] = child.stdout.read(8).readInt32LE()
-                pair[1] = child.stdout.read(8).readInt32LE()
-                node_pairs.push(pair)
-            }
-        })
-
-        /* Write intersection program input.
-         * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
-
-        writeNumber(zoneGeometries.length)
-        writeNumber(paths.length)
-
-        /* Polygons. */
-        for (const polygon of zoneGeometries) {
-            writeNumber(polygon.length)
-
-            for (const vert of polygon) {
-                writeVertex(vert[0] * 10000000, vert[1] * 10000000)
-            }
-        }
-
-        /* Paths. */
-        for (const path of paths) {
-            writeNumber(path.length)
-
-            for (const vert of path) {
-                writeVertex(vert.lon, vert.lat)
-            }
-
-            for (const vert of path) {
-                writeNumber(vert.id)
-            }
-        }
-
-        writeEnd()
-
-        return result
+    static async waysOverlappingAnyZone() {
+        const { paths, zones } = await ZoneRepository.getAllZonesAndOverlappingPaths()
+        return await polygonalIntersections(paths, zones)
     }
 
     static async blockSegments(segments) {

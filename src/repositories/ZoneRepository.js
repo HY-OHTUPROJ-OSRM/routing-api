@@ -56,6 +56,42 @@ class ZoneRepository {
             )
         )
     }
+
+    static async getAllZonesAndOverlappingPaths() {
+        const pathsResult = await sql`
+            SELECT w.id way_id, ARRAY_AGG(n.id) node_ids,
+                ARRAY_AGG(n.lat) node_latitudes,
+                ARRAY_AGG(n.lon) node_longitudes
+            FROM planet_osm_nodes AS n, (
+                    SELECT osm_id, (ST_Dump(ST_Intersection(l.way, z.geom))).geom clip
+                    FROM planet_osm_line AS l, zones AS z
+                ) AS q
+            INNER JOIN planet_osm_ways AS w ON q.osm_id=w.id
+            WHERE ST_Dimension(q.clip)=1 AND n.id=ANY(w.nodes)
+            GROUP BY w.id;
+        `
+
+        const paths = pathsResult.map(
+            row => row.node_ids.map(
+                (id, i) => ({ id: id, lat: row.node_latitudes[i], lon: row.node_longitudes[i] })
+            )
+        )
+
+        const zonesResult = await sql`
+            SELECT ARRAY_AGG(ARRAY[ST_X(dp), ST_Y(dp)]) points
+            FROM (
+                SELECT id, ST_Transform((ST_DumpPoints(geom)).geom, 4326) dp
+                FROM zones
+            )
+            GROUP BY id;
+        `
+
+        const zones = zonesResult.map(
+            row => row.points
+        )
+
+        return { paths: paths, zones: zones }
+    }
 }
 
 module.exports = ZoneRepository
