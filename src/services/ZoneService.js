@@ -1,5 +1,5 @@
 const { spawn } = require("child_process")
-const { open, unlink } = require("fs/promises")
+const { open, unlink } = require("fs").promises
 
 const ZoneRepository = require("../repositories/ZoneRepository")
 const validator = require("../components/Validators")
