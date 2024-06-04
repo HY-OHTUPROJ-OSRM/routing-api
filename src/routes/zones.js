@@ -41,8 +41,6 @@ zoneRouter.post("/", async (req, res) => {
         return
     }
 
-    res.status(201).send()
-
     const zoneGeometries = featureCollection.features.map(
         feature => feature.geometry.coordinates[0]
     )
@@ -50,6 +48,7 @@ zoneRouter.post("/", async (req, res) => {
 
     try {
         await ZoneService.blockSegments(overlappingSegments)
+        res.status(201).send()
     } catch (error) {
         res.status(500).json({ message: "An error occurred while creating zones", error: error.message })
     }

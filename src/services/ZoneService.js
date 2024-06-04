@@ -3,6 +3,7 @@ const { open, unlink } = require("fs").promises
 
 const ZoneRepository = require("../repositories/ZoneRepository")
 const validator = require("../components/Validators")
+const { makeOutputReader } = require("../utils/process_utils")
 
 const blockedSegments = new Set()
 
@@ -147,8 +148,8 @@ class ZoneService {
 
         const contract = spawn("osrm-contract", ["--segment-speed-file", filename, "route-data.osrm"])
 
-        contract.stdout.on("data", (data) => process.stdout.write(`[osrm-contract] ${data}`))
-        contract.stderr.on("data", (data) => process.stderr.write(`[osrm-contract] ${data}`))
+        contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout))
+        contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr))
 
         return new Promise((resolve, reject) => {
             contract.on("exit", (code, signal) => {
@@ -161,8 +162,8 @@ class ZoneService {
 
                 const datastore = spawn("osrm-datastore", ["route-data.osrm"])
 
-                datastore.stdout.on("data", (data) => process.stdout.write(`[osrm-datastore] ${data}`))
-                datastore.stderr.on("data", (data) => process.stderr.write(`[osrm-datastore] ${data}`))
+                datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout))
+                datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr))
 
                 datastore.on("exit", (code, signal) => {
                     if (code != 0) {
