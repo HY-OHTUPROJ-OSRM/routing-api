@@ -48,7 +48,11 @@ zoneRouter.post("/", async (req, res) => {
     )
     const overlappingSegments = await ZoneService.waysOverlappingZone(zoneIds, zoneGeometries)
 
-    ZoneService.blockSegments(overlappingSegments)
+    try {
+        await ZoneService.blockSegments(overlappingSegments)
+    } catch (error) {
+        res.status(500).json({ message: "An error occurred while creating zones", error: error.message })
+    }
 })
 
 zoneRouter.delete("/:id", async (req, res) => {

@@ -147,28 +147,30 @@ class ZoneService {
 
         const contract = spawn("osrm-contract", ["--segment-speed-file", filename, "route-data.osrm"])
 
-        const dump = (data) => {
-        }
-
-        contract.stdout.on("data", dump)
-        contract.stderr.on("data", dump)
+        contract.stdout.on("data", (data) => process.stdout.write(`[osrm-contract] ${data}`))
+        contract.stderr.on("data", (data) => process.stderr.write(`[osrm-contract] ${data}`))
 
         return new Promise((resolve, reject) => {
             contract.on("exit", (code, signal) => {
                 unlink(filename)
 
                 if (code != 0) {
-                    resolve(false)
+                    reject()
                     return
                 }
 
                 const datastore = spawn("osrm-datastore", ["route-data.osrm"])
 
-                datastore.stdout.on("data", dump)
-                datastore.stderr.on("data", dump)
+                datastore.stdout.on("data", (data) => process.stdout.write(`[osrm-datastore] ${data}`))
+                datastore.stderr.on("data", (data) => process.stderr.write(`[osrm-datastore] ${data}`))
 
                 datastore.on("exit", (code, signal) => {
-                    resolve(code == 0)
+                    if (code != 0) {
+                        reject()
+                        return
+                    }
+
+                    resolve()
                 })
             })
         })
