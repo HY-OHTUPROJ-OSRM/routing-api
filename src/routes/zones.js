@@ -13,6 +13,17 @@ zoneRouter.get("/", async (req, res) => {
     }
 });
 
+zoneRouter.post("/diff", async (req, res) => {
+    const { added, deleted } = req.body
+
+    try {
+        await ZoneService.changeZones(added, deleted)
+        res.status(201).send()
+    } catch (error) {
+        res.status(400).json({ message: "An error occurred while changing zones", error: error.message })
+    }
+})
+
 zoneRouter.post("/", async (req, res) => {
     const featureCollection = req.body
 

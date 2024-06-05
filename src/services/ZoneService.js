@@ -104,6 +104,21 @@ class ZoneService {
         return zones
     }
 
+    static async changeZones(addZones, deleteZones) {
+        await ZoneRepository.deleteZones(deleteZones)
+
+        addZones.forEach((zone) => { delete zone.properties.id })
+
+        deleteZones.forEach(id => blockedSegments.delete(Number(id)))
+
+        const fc = {
+            "type": "FeatureCollection",
+            "features": addZones
+        }
+
+        await ZoneService.createZones(fc)
+    }
+
     static async createZones(featureCollection) {
         const errors = validator.valid(featureCollection, true)
 
