@@ -11,10 +11,8 @@ execSyncCustom("osrm-contract",  "osrm-contract ./route-data.osm")
 execSyncCustom("osrm-datastore", "osrm-datastore ./route-data.osm")
 
 const startServer = async () => {
-    const segments = await ZoneService.waysOverlappingAnyZone()
-
     try {
-        await ZoneService.blockSegments(segments)
+        await ZoneService.init()
     } catch (error) {
         console.error(error)
         return

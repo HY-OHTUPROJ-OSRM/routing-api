@@ -28,30 +28,14 @@ zoneRouter.post("/", async (req, res) => {
         return
     }
 
-    let zoneIds
     try {
-        zoneIds = await ZoneService.createZones(featureCollection)
+        await ZoneService.createZones(featureCollection)
     } catch (error) {
         res.status(500).json({ message: "An error occurred while creating zones", error: error.message })
         return
     }
 
-    if (zoneIds.length == 0) {
-        res.status(500).json({ message: "An error occurred while creating zones (zoneIds.length == 0)"})
-        return
-    }
-
-    const zoneGeometries = featureCollection.features.map(
-        feature => feature.geometry.coordinates[0]
-    )
-    const overlappingSegments = await ZoneService.waysOverlappingZone(zoneIds, zoneGeometries)
-
-    try {
-        await ZoneService.blockSegments(overlappingSegments)
-        res.status(201).send()
-    } catch (error) {
-        res.status(500).json({ message: "An error occurred while creating zones", error: error.message })
-    }
+    res.status(201).send()
 })
 
 zoneRouter.delete("/:id", async (req, res) => {
