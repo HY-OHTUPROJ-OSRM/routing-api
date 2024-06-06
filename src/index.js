@@ -1,19 +1,45 @@
 require("dotenv").config()
 const { PORT, DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, DATABASE_PORT } = require("./utils/config")
 const server = require("./server")
-const { execSync, exec } = require('child_process');
+const { spawn } = require('child_process');
 const ZoneService = require("./services/ZoneService")
+const { formatOutput, execSyncCustom, makeOutputReader } = require("./utils/process_utils")
 
-try {
-    console.log(execSync(`./create_database.sh "${DATABASE_USER}" "${DATABASE_PASSWORD}" "${DATABASE_HOST}" "${DATABASE_PORT}" ./route-data.osm`))
-} catch {}
+execSyncCustom("create_database.sh", "./create_database.sh")
+execSyncCustom("osrm-extract",   "osrm-extract -p /opt/car.lua ./route-data.osm")
+execSyncCustom("osrm-contract",  "osrm-contract ./route-data.osm")
+execSyncCustom("osrm-datastore", "osrm-datastore ./route-data.osm")
 
-exec("./start_backend.sh ./route-data.osm")
+const startServer = async () => {
+    try {
+        await ZoneService.init()
+    } catch (error) {
+        console.error(error)
+        return
+    }
 
-ZoneService.waysOverlappingAnyZone()
-    .then(ZoneService.blockSegments)
-    .then(() => {
-        server.listen(PORT, () => {
-            console.log(`routing-api listening on port ${PORT}`)
-        })
+    server.listen(PORT, () => {
+        console.log(`routing-api listening on port ${PORT}`)
     })
+}
+
+const osrm = spawn("osrm-routed", ["--shared-memory", "--algorithm", "ch"])
+var started = false;
+
+osrm.stdout.on("data", (output) => {
+    process.stdout.write(formatOutput("osrm-routed", output))
+
+    if (!started && output.toString().includes("running and waiting for requests")) {
+        startServer()
+        started = true
+    }
+})
+
+osrm.stderr.on("data", makeOutputReader("osrm-routed", process.stderr))
+
+osrm.on("exit", (code, signal) => {
+    if (code != 0) {
+        console.error("osrm-routed has faulted!")
+        process.exit()
+    }
+})

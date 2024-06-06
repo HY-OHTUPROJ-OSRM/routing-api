@@ -1,10 +1,11 @@
 const { spawn } = require("child_process")
-const { open, unlink } = require("fs/promises")
+const { open, unlink } = require("fs").promises
 
 const ZoneRepository = require("../repositories/ZoneRepository")
 const validator = require("../components/Validators")
+const { makeOutputReader } = require("../utils/process_utils")
 
-const blockedSegments = new Set()
+const blockedSegments = new Map()
 
 function binaryWriter(stream) {
     const bufferSize = 512
@@ -87,9 +88,35 @@ async function polygonalIntersections(paths, zoneGeometries) {
 }
 
 class ZoneService {
+    static async init() {
+        for (const zone of await ZoneRepository.getAllZones()) {
+            const paths = await ZoneRepository.getOverlappingPaths([zone.id])
+            const overlappingSegments = await polygonalIntersections(paths, [zone.points])
+
+            await ZoneService.blockSegments(zone.id, overlappingSegments)
+        }
+
+        await ZoneService.updateblockedSegments()
+    }
+
     static async getZones() {
         const zones = await ZoneRepository.getZones()
         return zones
+    }
+
+    static async changeZones(addZones, deleteZones) {
+        await ZoneRepository.deleteZones(deleteZones)
+
+        addZones.forEach((zone) => { delete zone.properties.id })
+
+        deleteZones.forEach(id => blockedSegments.delete(Number(id)))
+
+        const fc = {
+            "type": "FeatureCollection",
+            "features": addZones
+        }
+
+        await ZoneService.createZones(fc)
     }
 
     static async createZones(featureCollection) {
@@ -105,7 +132,31 @@ class ZoneService {
             ids.push(await ZoneRepository.createZone(feature))
         }
 
-        return ids
+        if (ids.length == 0) {
+            throw Error("No zone IDs returned")
+        }
+
+        const zoneGeometries = featureCollection.features.map(
+            feature => feature.geometry.coordinates[0]
+        )
+
+        for (let i = 0; i < ids.length; ++i) {
+            const overlappingSegments = await ZoneService.waysOverlappingZone([ids[i]], [zoneGeometries[i]])
+
+            await ZoneService.blockSegments(ids[i], overlappingSegments)
+        }
+
+        await ZoneService.updateblockedSegments()
+    }
+
+    static async deleteZone(id) {
+        id = Number(id)
+
+        await ZoneRepository.deleteZone(id)
+
+        blockedSegments.delete(id)
+
+        await ZoneService.updateblockedSegments()
     }
 
     /* zoneIds:        Array of the databse ids of the zones.
@@ -125,15 +176,28 @@ class ZoneService {
         return await polygonalIntersections(paths, zones)
     }
 
-    static async blockSegments(segments) {
-        for (const [a, b] of segments) {
-            blockedSegments.add(a < b ? [a, b] : [b, a])
+    static async blockSegments(zoneID, segments) {
+        if (!blockedSegments.has(zoneID)) {
+            blockedSegments.set(zoneID, new Set())
         }
 
-        const csv = Array.from(blockedSegments)
-            .map(([a, b]) => `${a},${b},0\n${b},${a},0`)
-            .join("\n")
+        const zoneSegments = blockedSegments.get(zoneID)
 
+        for (const [a, b] of segments) {
+            zoneSegments.add(a < b ? [a, b] : [b, a])
+        }
+    }
+
+    static async updateblockedSegments() {
+        let lines = []
+
+        for (const zoneSegments of blockedSegments.values()) {
+            for (const [a, b] of zoneSegments) {
+                lines.push(`${a},${b},0\n${b},${a},0`)
+            }
+        }
+
+        const csv = lines.join('\n')
         const filename = "segments.csv"
 
         /* TODO What if the file already exists? */
@@ -143,28 +207,30 @@ class ZoneService {
 
         const contract = spawn("osrm-contract", ["--segment-speed-file", filename, "route-data.osrm"])
 
-        const dump = (data) => {
-        }
-
-        contract.stdout.on("data", dump)
-        contract.stderr.on("data", dump)
+        contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout))
+        contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr))
 
         return new Promise((resolve, reject) => {
             contract.on("exit", (code, signal) => {
                 unlink(filename)
 
                 if (code != 0) {
-                    resolve(false)
+                    reject()
                     return
                 }
 
                 const datastore = spawn("osrm-datastore", ["route-data.osrm"])
 
-                datastore.stdout.on("data", dump)
-                datastore.stderr.on("data", dump)
+                datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout))
+                datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr))
 
                 datastore.on("exit", (code, signal) => {
-                    resolve(code == 0)
+                    if (code != 0) {
+                        reject()
+                        return
+                    }
+
+                    resolve()
                 })
             })
         })

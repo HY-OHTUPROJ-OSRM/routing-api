@@ -5,35 +5,60 @@ const validator = require("../components/Validators")
 const zoneRouter = Router()
 
 zoneRouter.get("/", async (req, res) => {
-    const zones = await ZoneService.getZones()
-    res.json(zones)
+    try {
+        const zones = await ZoneService.getZones()
+        res.json(zones)
+    } catch (error) {
+        res.status(500).json({ message: "An error occurred while getting zones", error: error.message })
+    }
 });
+
+zoneRouter.post("/diff", async (req, res) => {
+    const { added, deleted } = req.body
+
+    try {
+        await ZoneService.changeZones(added, deleted)
+        res.status(201).send()
+    } catch (error) {
+        res.status(400).json({ message: "An error occurred while changing zones", error: error.message })
+    }
+})
 
 zoneRouter.post("/", async (req, res) => {
     const featureCollection = req.body
 
-    const errors = validator.valid(featureCollection, true)
+    try {
+        const errors = validator.valid(featureCollection, true)
 
-    if (errors.length > 0) {
-        res.status(400).send(errors[0].message)
+        if (errors.length > 0) {
+            res.status(400).send(errors[0].message)
+            return
+        }
+    } catch (error) {
+        res.status(500).json({ message: "An error occurred while validating zones", error: error.message })
         return
     }
 
-    const zoneIds = await ZoneService.createZones(featureCollection)
-
-    if (zoneIds.length == 0) {
-        res.status(500).send()
+    try {
+        await ZoneService.createZones(featureCollection)
+    } catch (error) {
+        res.status(500).json({ message: "An error occurred while creating zones", error: error.message })
         return
     }
 
     res.status(201).send()
-
-    const zoneGeometries = featureCollection.features.map(
-        feature => feature.geometry.coordinates[0]
-    )
-    const overlappingSegments = await ZoneService.waysOverlappingZone(zoneIds, zoneGeometries)
-
-    ZoneService.blockSegments(overlappingSegments)
 })
+
+zoneRouter.delete("/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await ZoneService.deleteZone(id)
+
+    res.status(200).json({ message: `Zone with id ${id} deleted successfully` })
+  } catch (error) {
+    res.status(500).json({ message: "An error occurred while deleting a zone", error: error.message })
+  }
+});
 
 module.exports = zoneRouter

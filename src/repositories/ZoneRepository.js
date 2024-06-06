@@ -26,7 +26,19 @@ class ZoneRepository {
             )
             RETURNING id;
         `
-        return result.map(row => row.id)
+        return result[0].id
+    }
+
+    static async deleteZone(id) {
+        await sql`
+            DELETE FROM zones WHERE id=${id}
+        `
+    }
+
+    static async deleteZones(ids) {
+        await sql`
+            DELETE FROM zones WHERE id IN ${ sql(ids) }
+        `
     }
 
     static async getOverlappingPaths(zoneIds) {
@@ -49,6 +61,17 @@ class ZoneRepository {
                 (id, i) => ({ id: id, lat: row.node_latitudes[i], lon: row.node_longitudes[i] })
             )
         )
+    }
+
+    static async getAllZones() {
+        return await sql`
+            SELECT id, ARRAY_AGG(ARRAY[ST_X(dp), ST_Y(dp)]) points
+            FROM (
+                SELECT id, ST_Transform((ST_DumpPoints(geom)).geom, 4326) dp
+                FROM zones
+            )
+            GROUP BY id;
+        `
     }
 
     static async getAllZonesAndOverlappingPaths() {
