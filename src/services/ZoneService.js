@@ -39,6 +39,8 @@ async function polygonalIntersections(paths, zoneGeometries) {
     const child = spawn("Polygonal-Intersections-CLI")
     const { writeNumber, writeVertex, writeEnd } = binaryWriter(child.stdin)
     const node_pairs = []
+    const nodes = Object.assign({}, ...paths)
+
     const result = new Promise((resolve, reject) => {
         child.stdout.on("end", () => {
             resolve(node_pairs)
@@ -48,8 +50,21 @@ async function polygonalIntersections(paths, zoneGeometries) {
     child.stdout.on("readable", () => {
         for (let to_read = child.stdout.readableLength; to_read >= 16; to_read -= 16) {
             const pair = [0, 0]
-            pair[0] = child.stdout.read(8).readInt32LE()
-            pair[1] = child.stdout.read(8).readInt32LE()
+
+            const id0 = child.stdout.read(8).readInt32LE()
+            pair[0] = {
+                id: id0,
+                lat: nodes[id0].lat / 10_000_000,
+                lon: nodes[id0].lon / 10_000_000
+            }
+
+            const id1 = child.stdout.read(8).readInt32LE()
+            pair[1] = {
+                id: id1,
+                lat: nodes[id1].lat / 10_000_000,
+                lon: nodes[id1].lon / 10_000_000
+            }
+
             node_pairs.push(pair)
         }
     })
@@ -70,15 +85,17 @@ async function polygonalIntersections(paths, zoneGeometries) {
     }
 
     /* Paths. */
-    for (const path of paths) {
+    for (var path of paths) {
+        path = Object.entries(path)
+
         writeNumber(path.length)
 
-        for (const vert of path) {
-            writeVertex(vert.lon, vert.lat)
+        for (const [id, coord] of path) {
+            writeVertex(coord.lon, coord.lat)
         }
 
-        for (const vert of path) {
-            writeNumber(vert.id)
+        for (const [id, coord] of path) {
+            writeNumber(id)
         }
     }
 
@@ -97,6 +114,18 @@ class ZoneService {
         }
 
         await ZoneService.updateblockedSegments()
+    }
+
+    static async getBlockedSegments() {
+        const segments = new Set([])
+
+        for (const zone of blockedSegments.values()) {
+            zone.forEach((segment) => {
+                segments.add(segment)
+            })
+        }
+
+        return Array.from(segments)
     }
 
     static async getZones() {
@@ -193,7 +222,7 @@ class ZoneService {
 
         for (const zoneSegments of blockedSegments.values()) {
             for (const [a, b] of zoneSegments) {
-                lines.push(`${a},${b},0\n${b},${a},0`)
+                lines.push(`${a.id},${b.id},0\n${b.id},${a.id},0`)
             }
         }
 

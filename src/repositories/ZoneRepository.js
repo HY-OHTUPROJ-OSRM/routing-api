@@ -57,8 +57,13 @@ class ZoneRepository {
         `
 
         return result.map(
-            row => row.node_ids.map(
-                (id, i) => ({ id: id, lat: row.node_latitudes[i], lon: row.node_longitudes[i] })
+            row => Object.fromEntries(
+                row.node_ids.map(
+                    (id, i) => [id, {
+                        lat: row.node_latitudes[i],
+                        lon: row.node_longitudes[i]
+                    }]
+                )
             )
         )
     }
