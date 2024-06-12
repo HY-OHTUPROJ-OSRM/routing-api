@@ -82,7 +82,7 @@ async function polygonalIntersections(paths, zoneGeometries) {
         writeNumber(polygon.length)
 
         for (const vert of polygon) {
-            writeVertex(vert[0] * 10000000, vert[1] * 10000000)
+            writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
         }
     }
 
@@ -113,11 +113,13 @@ async function polygonalIntersections(paths, zoneGeometries) {
 
 class ZoneService {
     static async init() {
-        for (const zone of await ZoneRepository.getAllZones()) {
-            const paths = await ZoneRepository.getOverlappingPaths([zone.id])
-            const overlappingSegments = await polygonalIntersections(paths, [zone.points])
+        const fc = await ZoneRepository.getZones()
 
-            await ZoneService.blockSegments(zone.id, overlappingSegments)
+        for (const zone of fc.features) {
+            const paths = await ZoneRepository.getOverlappingPaths([zone.properties.id])
+            const overlappingSegments = await polygonalIntersections(paths, [zone.geometry.coordinates[0]])
+
+            await ZoneService.blockSegments(zone.properties.id, overlappingSegments)
         }
 
         await ZoneService.updateblockedSegments()
