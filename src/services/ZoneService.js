@@ -39,7 +39,7 @@ async function polygonalIntersections(paths, zoneGeometries) {
     const child = spawn("Polygonal-Intersections-CLI")
     const { writeNumber, writeVertex, writeEnd } = binaryWriter(child.stdin)
     const node_pairs = []
-    const nodes = Object.assign({}, ...paths)
+    const nodes = paths.map(path => path.nodes).reduce((merged, map) => new Map([...merged, ...map]), new Map())
 
     const result = new Promise((resolve, reject) => {
         child.stdout.on("end", () => {
@@ -52,17 +52,19 @@ async function polygonalIntersections(paths, zoneGeometries) {
             const pair = [0, 0]
 
             const id0 = child.stdout.read(8).readInt32LE()
+            const coord0 = nodes.get(String(id0))
             pair[0] = {
                 id: id0,
-                lat: nodes[id0].lat / 10_000_000,
-                lon: nodes[id0].lon / 10_000_000
+                lat: coord0.lat / 10_000_000,
+                lon: coord0.lon / 10_000_000
             }
 
             const id1 = child.stdout.read(8).readInt32LE()
+            const coord1 = nodes.get(String(id1))
             pair[1] = {
                 id: id1,
-                lat: nodes[id1].lat / 10_000_000,
-                lon: nodes[id1].lon / 10_000_000
+                lat: coord1.lat / 10_000_000,
+                lon: coord1.lon / 10_000_000
             }
 
             node_pairs.push(pair)
@@ -85,16 +87,21 @@ async function polygonalIntersections(paths, zoneGeometries) {
     }
 
     /* Paths. */
-    for (var path of paths) {
-        path = Object.entries(path)
+    for (const path of paths) {
+        nodesMap = path.nodes
 
-        writeNumber(path.length)
+        writeNumber(nodesMap.size)
 
-        for (const [id, coord] of path) {
+        const nodes = nodesMap.entries()
+
+        const visitedNodes = []
+
+        for (const [id, coord] of nodes) {
             writeVertex(coord.lon, coord.lat)
+            visitedNodes.push([id, coord])
         }
 
-        for (const [id, coord] of path) {
+        for (const [id, coord] of visitedNodes) {
             writeNumber(id)
         }
     }
