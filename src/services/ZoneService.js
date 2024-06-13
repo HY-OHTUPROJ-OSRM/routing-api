@@ -4,6 +4,7 @@ const { open, unlink } = require("fs").promises
 const ZoneRepository = require("../repositories/ZoneRepository")
 const validator = require("../components/Validators")
 const { makeOutputReader } = require("../utils/process_utils")
+const { PROFILES_PATH } = require("../utils/config")
 
 const blockedSegments = new Map()
 
@@ -236,12 +237,29 @@ class ZoneService {
         }
 
         const csv = lines.join('\n')
-        const filename = "segments.csv"
+        const filename = "routing-api-segments.csv"
 
-        /* TODO What if the file already exists? */
-        const file = await open(filename, "wx")
+        const file = await open(filename, "w")
         await file.write(csv)
         await file.close()
+
+        const extract = spawn("osrm-extract", ["-p", `${PROFILES_PATH}/car.lua`, "./route-data.osm"])
+
+        extract.stdout.on("data", makeOutputReader("osrm-extract", process.stdout))
+        extract.stderr.on("data", makeOutputReader("osrm-extract", process.stderr))
+
+        const waitExtract = new Promise((resolve, reject) => {
+            extract.on("exit", (code, signal) => {
+                if (code != 0) {
+                    reject()
+                    return
+                }
+
+                resolve()
+            })
+        })
+
+        await waitExtract
 
         const contract = spawn("osrm-contract", ["--segment-speed-file", filename, "route-data.osrm"])
 

@@ -21,7 +21,7 @@ routeRouter.get("/v1/driving/:routeParams", async (req, res) => {
         res.send(routing.data)
     } catch (error) {
         console.error(error.message)
-        res.status(404).send()
+        res.status(404).json({message: "No routes found"})
     }
 });
 
