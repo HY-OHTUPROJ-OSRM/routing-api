@@ -3,6 +3,7 @@ const cors = require("cors")
 
 const routeRouter = require("./routes/route")
 const zoneRouter = require("./routes/zones")
+const segmentRouter = require("./routes/segments")
 
 const server = express()
 
@@ -11,5 +12,6 @@ server.use(cors())
 
 server.use("/route", routeRouter)
 server.use("/zones", zoneRouter)
+server.use("/segments", segmentRouter)
 
 module.exports = server

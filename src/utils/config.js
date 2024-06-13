@@ -6,6 +6,7 @@ const DATABASE_DB = process.env.DATABASE_DB || ""
 const DATABASE_USER = process.env.DATABASE_USER || ""
 const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || ""
 const SRID = process.env.SRID || "3857"
+const PROFILES_PATH = process.env.PROFILES_PATH || "/opt"
 
 module.exports = {
     PORT,
@@ -15,5 +16,6 @@ module.exports = {
     DATABASE_DB,
     DATABASE_USER,
     DATABASE_PASSWORD,
-    SRID
+    SRID,
+    PROFILES_PATH
 }

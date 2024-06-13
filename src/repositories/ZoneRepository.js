@@ -43,23 +43,62 @@ class ZoneRepository {
 
     static async getOverlappingPaths(zoneIds) {
         const result = await sql`
-            SELECT w.id way_id, ARRAY_AGG(n.id) node_ids,
-                ARRAY_AGG(n.lat) node_latitudes,
-                ARRAY_AGG(n.lon) node_longitudes
-            FROM planet_osm_nodes AS n, (
-                    SELECT osm_id, (ST_Dump(ST_Intersection(l.way, z.geom))).geom clip
-                    FROM planet_osm_line AS l, zones AS z
-                    WHERE z.id=ANY(${zoneIds}::int[])
-                ) AS q
-            INNER JOIN planet_osm_ways AS w ON q.osm_id=w.id
-            WHERE ST_Dimension(q.clip)=1 AND n.id=ANY(w.nodes)
-            GROUP BY w.id;
+            WITH unnested_nodes AS (
+                SELECT
+                    intersections.zone_id,
+                    ways.id AS way_id,
+                    unnest(array(SELECT nodes[i] FROM generate_series(array_lower(nodes, 1), array_upper(nodes, 1)) i)) AS node_id,
+                    generate_series(array_lower(ways.nodes, 1), array_upper(ways.nodes, 1)) AS node_pos
+                FROM
+                    (
+                        SELECT
+                            zones.id AS zone_id,
+                            osm_id,
+                            (ST_Dump(ST_Intersection(lines.way, zones.geom))).geom AS clip
+                        FROM planet_osm_line AS lines, zones
+                        WHERE zones.id = ANY(${zoneIds}::int[])
+                    ) AS intersections
+                INNER JOIN
+                    planet_osm_ways AS ways ON intersections.osm_id = ways.id
+                WHERE
+                    ST_Dimension(intersections.clip) = 1
+            ),
+            located_nodes AS (
+                SELECT DISTINCT
+                    zone_id,
+                    way_id,
+                    node_pos,
+                    node_id,
+                    n.lat,
+                    n.lon
+                FROM
+                    unnested_nodes
+                INNER JOIN
+                    planet_osm_nodes AS n ON node_id = n.id
+            )
+            SELECT
+                zone_id,
+                way_id,
+                ARRAY_AGG(ARRAY[node_id, lat, lon] ORDER BY node_pos) AS nodes
+            FROM
+                located_nodes
+            GROUP BY
+                zone_id, way_id;
         `
 
         return result.map(
-            row => row.node_ids.map(
-                (id, i) => ({ id: id, lat: row.node_latitudes[i], lon: row.node_longitudes[i] })
-            )
+            row => ({
+                zoneId: row.zone_id,
+                nodes: (() => {
+                    const path = new Map()
+
+                    row.nodes.forEach(([nodeId, lat, lon]) => {
+                        path.set(nodeId, { lat, lon })
+                    })
+
+                    return path
+                })()
+            })
         )
     }
 
