@@ -9,7 +9,7 @@ class ZoneRepository {
             )
             SELECT json_build_object(
                 'type', 'FeatureCollection',
-                'features', json_agg(ST_AsGeoJSON(gps_zones.*)::json)
+                'features', COALESCE(json_agg(ST_AsGeoJSON(gps_zones.*)::json), '[]'::json)
             )
             FROM gps_zones;
         `
