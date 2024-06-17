@@ -1,8 +1,12 @@
-const sql = require("../utils/database")
+const databaseConnection = require("../utils/database")
 
 class ZoneRepository {
-    static async getZones() {
-        const zoneResult = await sql`
+    constructor(sql = databaseConnection) {
+        this.sql = sql
+    }
+
+    async getZones() {
+        const zoneResult = await this.sql`
             WITH gps_zones AS (
                 SELECT id, type, name, ST_Transform(geom, 4326)
                 FROM zones
@@ -16,8 +20,8 @@ class ZoneRepository {
         return zoneResult[0].json_build_object
     }
 
-    static async createZone(zone) {
-        const result = await sql`
+    async createZone(zone) {
+        const result = await this.sql`
             INSERT INTO zones (type, name, geom)
             VALUES (
                 ${zone.properties.type},
@@ -29,20 +33,20 @@ class ZoneRepository {
         return result[0].id
     }
 
-    static async deleteZone(id) {
-        await sql`
+    async deleteZone(id) {
+        await this.sql`
             DELETE FROM zones WHERE id=${id}
         `
     }
 
-    static async deleteZones(ids) {
-        await sql`
-            DELETE FROM zones WHERE id IN ${ sql(ids) }
+    async deleteZones(ids) {
+        await this.sql`
+            DELETE FROM zones WHERE id IN ${ this.sql(ids) }
         `
     }
 
-    static async getOverlappingPaths(zoneIds) {
-        const result = await sql`
+    async getOverlappingPaths(zoneIds) {
+        const result = await this.sql`
             WITH unnested_nodes AS (
                 SELECT
                     intersections.zone_id,
@@ -102,8 +106,8 @@ class ZoneRepository {
         )
     }
 
-    static async getAllZones() {
-        return await sql`
+    async getAllZones() {
+        return await this.sql`
             SELECT id, ARRAY_AGG(ARRAY[ST_X(dp), ST_Y(dp)]) points
             FROM (
                 SELECT id, ST_Transform((ST_DumpPoints(geom)).geom, 4326) dp
@@ -113,8 +117,8 @@ class ZoneRepository {
         `
     }
 
-    static async getAllZonesAndOverlappingPaths() {
-        const pathsResult = await sql`
+    async getAllZonesAndOverlappingPaths() {
+        const pathsResult = await this.sql`
             SELECT w.id way_id, ARRAY_AGG(n.id) node_ids,
                 ARRAY_AGG(n.lat) node_latitudes,
                 ARRAY_AGG(n.lon) node_longitudes
@@ -133,7 +137,7 @@ class ZoneRepository {
             )
         )
 
-        const zonesResult = await sql`
+        const zonesResult = await this.sql`
             SELECT ARRAY_AGG(ARRAY[ST_X(dp), ST_Y(dp)]) points
             FROM (
                 SELECT id, ST_Transform((ST_DumpPoints(geom)).geom, 4326) dp
