@@ -113,11 +113,16 @@ async function polygonalIntersections(paths, zoneGeometries) {
 }
 
 class ZoneService {
+    constructor(repository = new ZoneRepository()) {
+        this.repository = repository
+    }
+
     static async init() {
-        const fc = await ZoneRepository.getZones()
+        const repository = new ZoneRepository()
+        const fc = await repository.getZones()
 
         for (const zone of fc.features) {
-            const paths = await ZoneRepository.getOverlappingPaths([zone.properties.id])
+            const paths = await repository.getOverlappingPaths([zone.properties.id])
             const overlappingSegments = await polygonalIntersections(paths, [zone.geometry.coordinates[0]])
 
             await ZoneService.blockSegments(zone.properties.id, overlappingSegments)
@@ -126,7 +131,7 @@ class ZoneService {
         await ZoneService.updateblockedSegments()
     }
 
-    static async getBlockedSegments() {
+    async getBlockedSegments() {
         const segments = new Set([])
 
         for (const zone of blockedSegments.values()) {
@@ -138,13 +143,13 @@ class ZoneService {
         return Array.from(segments)
     }
 
-    static async getZones() {
-        const zones = await ZoneRepository.getZones()
+    async getZones() {
+        const zones = await this.repository.getZones()
         return zones
     }
 
-    static async changeZones(addZones, deleteZones) {
-        await ZoneRepository.deleteZones(deleteZones)
+    async changeZones(addZones, deleteZones) {
+        await this.repository.deleteZones(deleteZones)
 
         addZones.forEach((zone) => { delete zone.properties.id })
 
@@ -155,10 +160,10 @@ class ZoneService {
             "features": addZones
         }
 
-        await ZoneService.createZones(fc)
+        await this.createZones(fc)
     }
 
-    static async createZones(featureCollection) {
+    async createZones(featureCollection) {
         const errors = validator.valid(featureCollection, true)
 
         if (errors.length > 0) {
@@ -168,7 +173,7 @@ class ZoneService {
         const ids = []
 
         for (const feature of featureCollection.features) {
-            ids.push(await ZoneRepository.createZone(feature))
+            ids.push(await this.repository.createZone(feature))
         }
 
         if (ids.length == 0) {
@@ -180,7 +185,7 @@ class ZoneService {
         )
 
         for (let i = 0; i < ids.length; ++i) {
-            const overlappingSegments = await ZoneService.waysOverlappingZone([ids[i]], [zoneGeometries[i]])
+            const overlappingSegments = await this.waysOverlappingZone([ids[i]], [zoneGeometries[i]])
 
             await ZoneService.blockSegments(ids[i], overlappingSegments)
         }
@@ -188,10 +193,10 @@ class ZoneService {
         await ZoneService.updateblockedSegments()
     }
 
-    static async deleteZone(id) {
+    async deleteZone(id) {
         id = Number(id)
 
-        await ZoneRepository.deleteZone(id)
+        await this.repository.deleteZone(id)
 
         blockedSegments.delete(id)
 
@@ -205,13 +210,13 @@ class ZoneService {
      * returns:        Array of pairs of node ids
      *                 corresponding to the overlapping road
      *                 segments. */
-    static async waysOverlappingZone(zoneIds, zoneGeometries) {
-        const paths = await ZoneRepository.getOverlappingPaths(zoneIds)
+    async waysOverlappingZone(zoneIds, zoneGeometries) {
+        const paths = await this.repository.getOverlappingPaths(zoneIds)
         return await polygonalIntersections(paths, zoneGeometries)
     }
 
-    static async waysOverlappingAnyZone() {
-        const { paths, zones } = await ZoneRepository.getAllZonesAndOverlappingPaths()
+    async waysOverlappingAnyZone() {
+        const { paths, zones } = await this.repository.getAllZonesAndOverlappingPaths()
         return await polygonalIntersections(paths, zones)
     }
 

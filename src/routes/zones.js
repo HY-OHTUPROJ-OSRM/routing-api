@@ -1,12 +1,72 @@
 const { Router } = require("express")
 const ZoneService = require("../services/ZoneService")
+const ZoneRepository = require("../repositories/ZoneRepository")
 const validator = require("../components/Validators")
+const databaseConnection = require("../utils/database.js")
 
 const zoneRouter = Router()
 
+/* An actual atomic lock should be overkill. TODO pls verify */
+// const lock = new Int32Array(1)
+let lockHeld = false;
+
+function acquireZoneRouterLock() {
+	// return Atomics.compareExchange(lock, 0, 0, 1) == 0
+	if (lockHeld) {
+		return false;
+	}
+
+	lockHeld = true;
+	return true;
+}
+
+function releaseZoneRouterLock() {
+	// if (Atomics.compareExchange(lock, 0, 1, 0) != 1) {
+	// 	throw new Error("called releaseZoneRouterLock() while lock wasn't held")
+	// }
+	if (!lockHeld) {
+		throw new Error("called releaseZoneRouterLock() while lock wasn't help")
+	}
+
+	lockHeld = false;
+}
+
+zoneRouter.use(async (req, res, next) => {
+    if (req.method == "GET") {
+        req.zoneService = new ZoneService()
+        next()
+        return
+    } else if (req.method != "POST") {
+        next()
+        return
+    }
+
+    if (!acquireZoneRouterLock()) {
+            /* TODO set Retry-After header! */
+            res.status(503).json({ message: "This resource is currently in use." })
+            return
+    }
+
+    console.log("LOCK ACQUIRED !!!!!")
+
+    res.on("finish", async () => {
+            releaseZoneRouterLock()
+            console.log("LOCK RELEASED !!!!!")
+    })
+
+    await databaseConnection.begin(async (sql) => {
+        req.zoneService = new ZoneService(new ZoneRepository(sql))
+        next()
+
+        if (res.statusCode - res.statusCode % 100 != 200) {
+            throw Error()
+        }
+    })
+})
+
 zoneRouter.get("/", async (req, res) => {
     try {
-        const zones = await ZoneService.getZones()
+        const zones = await req.zoneService.getZones()
         res.json(zones)
     } catch (error) {
         res.status(500).json({ message: "An error occurred while getting zones", error: error.message })
@@ -17,7 +77,7 @@ zoneRouter.post("/diff", async (req, res) => {
     const { added, deleted } = req.body
 
     try {
-        await ZoneService.changeZones(added, deleted)
+        await req.zoneService.changeZones(added, deleted)
         res.status(201).send()
     } catch (error) {
         res.status(400).json({ message: "An error occurred while changing zones", error: error.message })
@@ -40,7 +100,7 @@ zoneRouter.post("/", async (req, res) => {
     }
 
     try {
-        await ZoneService.createZones(featureCollection)
+        await req.zoneService.createZones(featureCollection)
     } catch (error) {
         res.status(500).json({ message: "An error occurred while creating zones", error: error.message })
         return
@@ -53,7 +113,7 @@ zoneRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    await ZoneService.deleteZone(id)
+    await req.zoneService.deleteZone(id)
 
     res.status(200).json({ message: `Zone with id ${id} deleted successfully` })
   } catch (error) {
