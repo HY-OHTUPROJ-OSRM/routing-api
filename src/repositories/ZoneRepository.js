@@ -41,6 +41,65 @@ class ZoneRepository {
         `
     }
 
+    static async getPathsOverlappingZones() {
+        const result = await sql`
+            WITH unnested_nodes AS (
+                SELECT
+                    ways.id AS way_id,
+                    ways.tags[8] as speed,
+                    unnest(array(SELECT nodes[i] FROM generate_series(array_lower(nodes, 1), array_upper(nodes, 1)) i)) AS node_id,
+                    generate_series(array_lower(ways.nodes, 1), array_upper(ways.nodes, 1)) AS node_pos
+                FROM
+                    (
+                        SELECT
+                            osm_id,
+                            (ST_Dump(ST_Intersection(lines.way, zones.geom))).geom AS clip
+                        FROM planet_osm_line AS lines, zones
+                    ) AS intersections
+                INNER JOIN
+                    planet_osm_ways AS ways ON intersections.osm_id = ways.id
+                WHERE
+                    ST_Dimension(intersections.clip) = 1
+            ),
+            located_nodes AS (
+                SELECT DISTINCT
+                    way_id,
+                    speed,
+                    node_pos,
+                    node_id,
+                    n.lat,
+                    n.lon
+                FROM
+                    unnested_nodes
+                INNER JOIN
+                    planet_osm_nodes AS n ON node_id = n.id
+            )
+            SELECT
+                way_id,
+                ANY_VALUE(speed) AS speed,
+                ARRAY_AGG(ARRAY[node_id, lat, lon] ORDER BY node_pos) AS nodes
+            FROM
+                located_nodes
+            GROUP BY
+                way_id;
+        `
+
+        return result.map(
+            row => ({
+                speed: row.speed,
+                nodes: (() => {
+                    const path = new Map()
+
+                    row.nodes.forEach(([nodeId, lat, lon]) => {
+                        path.set(nodeId, { lat, lon })
+                    })
+
+                    return path
+                })()
+            })
+        )
+    }
+
     static async getOverlappingPaths(zoneIds) {
         const result = await sql`
             WITH unnested_nodes AS (
@@ -101,7 +160,7 @@ class ZoneRepository {
             })
         )
     }
-
+    /*
     static async getAllZones() {
         return await sql`
             SELECT id, ARRAY_AGG(ARRAY[ST_X(dp), ST_Y(dp)]) points
@@ -148,6 +207,7 @@ class ZoneRepository {
 
         return { paths: paths, zones: zones }
     }
+    */
 }
 
 module.exports = ZoneRepository
