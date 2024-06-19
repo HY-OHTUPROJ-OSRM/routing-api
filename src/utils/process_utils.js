@@ -1,4 +1,5 @@
 const { execSync } = require('child_process');
+const { progress } = require('../services/StatusService');
 
 function formatOutput(name, output) {
     return `\n[${name}] ${output.toString().split('\n').join(`\n[${name}] `)}`
@@ -7,6 +8,10 @@ function formatOutput(name, output) {
 function makeOutputReader(name, dest) {
     return (output) => {
         dest.write(formatOutput(name, output))
+        
+        if (output.includes("100%")) {
+            progress()
+        }
     }
 }
 
