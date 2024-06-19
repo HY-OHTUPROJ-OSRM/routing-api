@@ -124,18 +124,7 @@ async function calculateSegmentSpeeds(polygons, polylines, paths) {
 
 class ZoneService {
     static async init() {
-        const fc = await ZoneRepository.getZones()
-
-        /*
-        for (const zone of fc.features) {
-            const paths = await ZoneRepository.getOverlappingPaths([zone.properties.id])
-            const overlappingSegments = await polygonalIntersections(paths, [zone.geometry.coordinates[0]])
-
-            await ZoneService.blockSegments(zone.properties.id, overlappingSegments)
-        }
-        */
-
-        // await ZoneService.writeCSV([])
+        await ZoneService.updateBlockedSegments()
     }
 
     static async getBlockedSegments() {
@@ -159,6 +148,10 @@ class ZoneService {
 
         console.log(`${deletedZones.length} zones deleted`)
 
+        await ZoneService.updateBlockedSegments()
+    }
+
+    static async updateBlockedSegments() {
         process.stdout.write("fetching all current zones...")
         const zoneFC = await ZoneRepository.getZones()
         console.log(" done")

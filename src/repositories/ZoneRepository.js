@@ -52,14 +52,12 @@ class ZoneRepository {
                 FROM
                     (
                         SELECT
-                            osm_id,
-                            (ST_Dump(ST_Intersection(lines.way, zones.geom))).geom AS clip
+                            osm_id
                         FROM planet_osm_line AS lines, zones
+                        WHERE ST_Intersects(lines.way, zones.geom)
                     ) AS intersections
                 INNER JOIN
                     planet_osm_ways AS ways ON intersections.osm_id = ways.id
-                WHERE
-                    ST_Dimension(intersections.clip) = 1
             ),
             located_nodes AS (
                 SELECT DISTINCT
