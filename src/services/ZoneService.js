@@ -10,9 +10,9 @@ let blockedSegments = []
 
 function binaryWriter(stream) {
     return {
-        writeUInt64: (n) => {
-            buffer = Buffer.alloc(8)
-            buffer.writeBigUInt64LE(BigInt(n))
+        writeUInt8: (n) => {
+            buffer = Buffer.alloc(1)
+            buffer.writeUInt8(n)
             stream.write(buffer)
         },
         writeUInt16: (n) => {
@@ -20,18 +20,33 @@ function binaryWriter(stream) {
             buffer.writeUInt16LE(n)
             stream.write(buffer)
         },
+        writeUInt64: (n) => {
+            buffer = Buffer.alloc(8)
+            buffer.writeBigUInt64LE(BigInt(n))
+            stream.write(buffer)
+        },
+        writeDouble: (x) => {
+            buffer = Buffer.alloc(8)
+            buffer.writeDoubleLE(x)
+            stream.write(buffer)
+        },
         writeVertex: (x, y) => {
             buffer = Buffer.alloc(8)
-            buffer.writeInt32LE(x)
-            buffer.writeInt32LE(y)
+            buffer.writeInt32LE(x, 0)
+            buffer.writeInt32LE(y, 4)
             stream.write(buffer)
         }
     }
 }
 
-async function calculateSegmentSpeeds(polygons, polylines, paths) {
+async function calculateSegmentSpeeds(
+    roadblockPolygons,
+    roadblockPolylines,
+    speedzonePolygons,
+    paths
+) {
     const child = spawn("Polygonal-Intersections-CLI")
-    const { writeUInt64, writeUInt16, writeVertex } = binaryWriter(child.stdin)
+    const { writeUInt8, writeUInt16, writeUInt64, writeDouble, writeVertex } = binaryWriter(child.stdin)
     const resultSegments = new Map()
 
     const result = new Promise((resolve, reject) => {
@@ -67,16 +82,30 @@ async function calculateSegmentSpeeds(polygons, polylines, paths) {
      * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
 
     // Header
-    writeUInt64(polygons.length) // Polygon roadblocks
+    writeUInt64(roadblockPolygons.length) // Roadblock polygons
     writeUInt64(0) // Chain roadblocks
-    writeUInt64(0) // Speed zones
+    writeUInt64(speedzonePolygons.length) // Speed zone polygons
     writeUInt64(paths.length) // Paths
 
-    // Polygon roadblocks
-    for (const polygon of polygons) {
-        writeUInt64(polygon.length)
+    // Roadblock polygons
+    for (const polygon of roadblockPolygons) {
+        writeUInt64(polygon.verts.length)
 
-        for (const vert of polygon) {
+        for (const vert of polygon.verts) {
+            writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
+        }
+    }
+
+    // See the enum in https://github.com/HY-OHTUPROJ-OSRM/Polygonal-Intersections/blob/dev/source/algorithm/traffic.h
+    const types = {offset: 0, factor: 1, cap: 2, constant: 3}
+
+    // Speed zone polygons
+    for (const polygon of speedzonePolygons) {
+        writeUInt8(types[polygon.type])
+        writeDouble(polygon.effectValue)
+        writeUInt64(polygon.verts.length)
+
+        for (const vert of polygon.verts) {
             writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
         }
     }
@@ -142,11 +171,11 @@ class ZoneService {
             await ZoneRepository.createZone(zone)
         }
 
-        console.log(`${newZones.length} zones created`)
+        console.log(`${newZones ? newZones.length : 0} zones created`)
 
         await ZoneRepository.deleteZones(deletedZones)
 
-        console.log(`${deletedZones.length} zones deleted`)
+        console.log(`${deletedZones ? deletedZones.length : 0} zones deleted`)
 
         await ZoneService.updateBlockedSegments()
     }
@@ -160,16 +189,34 @@ class ZoneService {
         const paths = await ZoneRepository.getPathsOverlappingZones()
         console.log(" done")
 
-        let zones = []
+        let roadblockPolygons = []
+        let speedzonePolygons = []
+
         for (const feature of zoneFC.features) {
-            zones.push(feature.geometry.coordinates[0])
+            const type = feature.properties.type
+            const verts = feature.geometry.coordinates[0]
+            verts.pop() // remove the duplicate vertex at the end
+
+            if (type === "roadblock") {
+                roadblockPolygons.push({verts: verts})
+            } else {
+                speedzonePolygons.push({
+                    verts: verts,
+                    type: type,
+                    effectValue: feature.properties.effect_value
+                })
+            }
         }
 
-        // console.log("zones:")
-        // console.log(zones)
-
         process.stdout.write("calculating segments speeds...")
-        let newSegments = await calculateSegmentSpeeds(zones, [], paths)
+
+        let newSegments = await calculateSegmentSpeeds(
+            roadblockPolygons,
+            [],
+            speedzonePolygons,
+            paths
+        )
+
         console.log(" done")
 
         let lines = []
