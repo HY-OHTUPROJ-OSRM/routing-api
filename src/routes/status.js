@@ -13,7 +13,7 @@ statusRouter.get("/", async (req, res) => {
 
     res.writeHead(200, headers)
 
-    res.write(`data: ${JSON.stringify(StatusService.getStatus())}`)
+    res.write(`data: ${JSON.stringify(StatusService.getStatus())}\n\n`)
 
     const id = uuidv4()
 

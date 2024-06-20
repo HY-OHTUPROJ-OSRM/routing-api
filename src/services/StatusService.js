@@ -42,7 +42,7 @@ class StatusService {
 
     static async sendStatus() {
         Object.values(listeners).forEach(res => {
-            res.write(`data: ${JSON.stringify(StatusService.getStatus())}`)
+            res.write(`data: ${JSON.stringify(StatusService.getStatus())}\n\n`)
         })
     }
 
