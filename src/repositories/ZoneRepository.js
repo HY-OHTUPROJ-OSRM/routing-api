@@ -1,8 +1,44 @@
 const databaseConnection = require("../utils/database")
 
 class ZoneRepository {
-    constructor(sql = databaseConnection) {
-        this.sql = sql
+    constructor() {
+        this.sql = databaseConnection
+        this.transactionOngoing = false
+    }
+
+    async beginTransaction() {
+        if (this.transactionOngoing) {
+            throw Error("Transaction already ongoing.")
+        }
+
+        this.sql = await databaseConnection.reserve()
+        await this.sql`BEGIN;`
+
+        this.transactionOngoing = true
+    }
+
+    async commitTransaction() {
+        if (!this.transactionOngoing) {
+            throw Error("No transaction ongoing.")
+        }
+
+        await this.sql`COMMIT;`
+        await this.sql.release()
+
+        this.sql = databaseConnection
+        this.transactionOngoing = false
+    }
+
+    async rollbackTransaction() {
+        if (!this.transactionOngoing) {
+            throw Error("No transaction ongoing.")
+        }
+
+        await this.sql`ROLLBACK;`
+        await this.sql.release()
+
+        this.sql = databaseConnection
+        this.transactionOngoing = false
     }
 
     async getZones() {
