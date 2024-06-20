@@ -14,22 +14,22 @@ const zoneRouter = Router()
 let lockHeld = false;
 
 function acquireZoneRouterLock() {
-	if (lockHeld) {
-		return false;
-	}
+    if (lockHeld) {
+        return false;
+    }
 
-	lockHeld = true;
+	  lockHeld = true;
     StatusService.startJob()
-	return true;
+	  return true;
 }
 
 function releaseZoneRouterLock() {
-	if (!lockHeld) {
-		throw new Error("called releaseZoneRouterLock() while lock wasn't held")
-	}
+    if (!lockHeld) {
+        throw new Error("called releaseZoneRouterLock() while lock wasn't held")
+    }
 
     StatusService.endJob()
-	lockHeld = false;
+	  lockHeld = false;
 }
 
 zoneRouter.get("/", async (req, res) => {

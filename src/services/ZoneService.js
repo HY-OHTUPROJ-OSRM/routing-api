@@ -6,111 +6,151 @@ const validator = require("../components/Validators")
 const { makeOutputReader } = require("../utils/process_utils")
 const { PROFILES_PATH } = require("../utils/config")
 
-const blockedSegments = new Map()
-
 function binaryWriter(stream) {
-    const bufferSize = 512
-    const buffer = Buffer.alloc(bufferSize)
-    let numBytes = 0
-
-    const flushIfFull = () => {
-        if (numBytes >= bufferSize) {
-            stream.write(buffer)
-            numBytes = 0
-        }
-    }
-
     return {
-        writeNumber: (n) => {
-            numBytes = buffer.writeBigUInt64LE(BigInt(n), numBytes)
-            flushIfFull()
+        writeUInt8: (n) => {
+            buffer = Buffer.alloc(1)
+            buffer.writeUInt8(n)
+            stream.write(buffer)
+        },
+        writeUInt16: (n) => {
+            buffer = Buffer.alloc(2)
+            buffer.writeUInt16LE(n)
+            stream.write(buffer)
+        },
+        writeUInt64: (n) => {
+            buffer = Buffer.alloc(8)
+            buffer.writeBigUInt64LE(BigInt(n))
+            stream.write(buffer)
+        },
+        writeDouble: (x) => {
+            buffer = Buffer.alloc(8)
+            buffer.writeDoubleLE(x)
+            stream.write(buffer)
         },
         writeVertex: (x, y) => {
-            numBytes = buffer.writeInt32LE(x, numBytes)
-            numBytes = buffer.writeInt32LE(y, numBytes)
-            flushIfFull()
-        },
-        writeEnd: () => {
-            stream.end(buffer.subarray(0, numBytes))
+            buffer = Buffer.alloc(8)
+            buffer.writeInt32LE(x, 0)
+            buffer.writeInt32LE(y, 4)
+            stream.write(buffer)
         }
     }
 }
 
-async function polygonalIntersections(paths, zoneGeometries) {
+async function calculateSegmentSpeeds(
+    roadblockPolygons,
+    roadblockPolylines,
+    speedzonePolygons,
+    paths
+) {
     const child = spawn("Polygonal-Intersections-CLI")
-    const { writeNumber, writeVertex, writeEnd } = binaryWriter(child.stdin)
-    const node_pairs = []
-    const nodes = paths.map(path => path.nodes).reduce((merged, map) => new Map([...merged, ...map]), new Map())
+    const { writeUInt8, writeUInt16, writeUInt64, writeDouble, writeVertex } = binaryWriter(child.stdin)
+    const resultSegments = new Map()
 
     const result = new Promise((resolve, reject) => {
         child.stdout.on("end", () => {
-            resolve(node_pairs)
+            for (let [key, segment] of resultSegments) {
+                if (segment.currentSpeed === null) {
+                    resultSegments.delete(key);
+                }
+            }
+
+            resolve(resultSegments)
         })
     })
 
     child.stdout.on("readable", () => {
-        for (let to_read = child.stdout.readableLength; to_read >= 16; to_read -= 16) {
-            const pair = [0, 0]
+        const size = 3 * 8;
 
-            const id0 = child.stdout.read(8).readInt32LE()
-            const coord0 = nodes.get(String(id0))
-            pair[0] = {
-                id: id0,
-                lat: coord0.lat / 10_000_000,
-                lon: coord0.lon / 10_000_000
-            }
+        for (let to_read = child.stdout.readableLength; to_read >= size; to_read -= size) {
 
-            const id1 = child.stdout.read(8).readInt32LE()
-            const coord1 = nodes.get(String(id1))
-            pair[1] = {
-                id: id1,
-                lat: coord1.lat / 10_000_000,
-                lon: coord1.lon / 10_000_000
-            }
+            let buffer = child.stdout.read(size)
+            if (buffer === null) break
 
-            node_pairs.push(pair)
+            const startID = buffer.readBigUInt64LE(0x00)
+            const endID   = buffer.readBigUInt64LE(0x08)
+            const speed   = buffer.readDoubleLE   (0x10)
+
+            const key = `${startID};${endID}`
+            resultSegments.get(key).currentSpeed = speed
         }
     })
 
     /* Write intersection program input.
      * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
 
-    writeNumber(zoneGeometries.length)
-    writeNumber(paths.length)
+    // Header
+    writeUInt64(roadblockPolygons.length) // Roadblock polygons
+    writeUInt64(0) // Chain roadblocks
+    writeUInt64(speedzonePolygons.length) // Speed zone polygons
+    writeUInt64(paths.length) // Paths
 
-    /* Polygons. */
-    for (const polygon of zoneGeometries) {
-        writeNumber(polygon.length)
+    // Roadblock polygons
+    for (const polygon of roadblockPolygons) {
+        writeUInt64(polygon.verts.length)
 
-        for (const vert of polygon) {
+        for (const vert of polygon.verts) {
             writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
         }
     }
 
-    /* Paths. */
-    for (const path of paths) {
-        nodesMap = path.nodes
+    // See the enum in https://github.com/HY-OHTUPROJ-OSRM/Polygonal-Intersections/blob/dev/source/algorithm/traffic.h
+    const types = {offset: 0, factor: 1, cap: 2, constant: 3}
 
-        writeNumber(nodesMap.size)
+    // Speed zone polygons
+    for (const polygon of speedzonePolygons) {
+        writeUInt8(types[polygon.type])
+        writeDouble(polygon.effectValue)
+        writeUInt64(polygon.verts.length)
 
-        const nodes = nodesMap.entries()
-
-        const visitedNodes = []
-
-        for (const [id, coord] of nodes) {
-            writeVertex(coord.lon, coord.lat)
-            visitedNodes.push([id, coord])
-        }
-
-        for (const [id, coord] of visitedNodes) {
-            writeNumber(id)
+        for (const vert of polygon.verts) {
+            writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
         }
     }
 
-    writeEnd()
+    // Paths
+    for (const path of paths) {
+        nodesMap = path.nodes
+
+        writeUInt16(path.speed)
+        writeUInt64(nodesMap.size)
+
+        let startID = null
+        let startCoords = null
+
+        for (const [endID, endCoords] of nodesMap) {
+            if (startID !== null) {
+                const key = `${startID};${endID}`
+
+                resultSegments.set(key, {
+                    start: {
+                        id: startID,
+                        lat: startCoords.lat / 10_000_000,
+                        lon: startCoords.lon / 10_000_000
+                    },
+                    end: {
+                        id: endID,
+                        lat: endCoords.lat / 10_000_000,
+                        lon: endCoords.lon / 10_000_000
+                    },
+                    originalSpeed: Number(path.speed),
+                    currentSpeed: null
+                })
+            }
+
+            writeUInt64(endID)
+            writeVertex(endCoords.lon, endCoords.lat)
+
+            startID = endID
+            startCoords = endCoords
+        }
+    }
 
     return result
 }
+
+// All modifications to this must be atomic at the level of JS execution!
+affectedSegments = []
 
 class ZoneService {
     constructor(repository = new ZoneRepository()) {
@@ -118,153 +158,115 @@ class ZoneService {
     }
 
     static async init() {
-        const repository = new ZoneRepository()
-        const fc = await repository.getZones()
-
-        for (const zone of fc.features) {
-            const paths = await repository.getOverlappingPaths([zone.properties.id])
-            const overlappingSegments = await polygonalIntersections(paths, [zone.geometry.coordinates[0]])
-
-            await ZoneService.blockSegments(zone.properties.id, overlappingSegments)
-        }
-
-        await ZoneService.updateblockedSegments()
+        await new ZoneService().updateBlockedSegments()
     }
 
-    async getBlockedSegments() {
-        const segments = new Set([])
-
-        for (const zone of blockedSegments.values()) {
-            zone.forEach((segment) => {
-                segments.add(segment)
-            })
-        }
-
-        return Array.from(segments)
+    static async getBlockedSegments() {
+        return affectedSegments;
     }
 
     async getZones() {
-        const zones = await this.repository.getZones()
-        return zones
+        return await this.repository.getZones()
     }
 
-    async changeZones(addZones, deleteZones) {
-        await this.repository.deleteZones(deleteZones)
+    async changeZones(newZones, deletedZones) {
+        for (const zone of newZones) {
+            delete zone.properties.id
 
-        addZones.forEach((zone) => { delete zone.properties.id })
-
-        deleteZones.forEach(id => blockedSegments.delete(Number(id)))
-
-        const fc = {
-            "type": "FeatureCollection",
-            "features": addZones
+            await this.repository.createZone(zone)
         }
 
-        await this.createZones(fc)
+        console.log(`${newZones ? newZones.length : 0} zones created`)
+
+        await this.repository.deleteZones(deletedZones)
+
+        console.log(`${deletedZones ? deletedZones.length : 0} zones deleted`)
+
+        await this.updateBlockedSegments()
     }
 
-    async createZones(featureCollection) {
-        const errors = validator.valid(featureCollection, true)
+    async updateBlockedSegments() {
+        process.stdout.write("fetching all current zones...")
+        const zoneFC = await this.repository.getZones()
+        console.log(" done")
 
-        if (errors.length > 0) {
-            throw Error(errors[0])
-        }
+        process.stdout.write("fetching all paths overlapping zones...")
+        const paths = await this.repository.getPathsOverlappingZones()
+        console.log(" done")
 
-        const ids = []
+        let roadblockPolygons = []
+        let speedzonePolygons = []
 
-        for (const feature of featureCollection.features) {
-            ids.push(await this.repository.createZone(feature))
-        }
+        for (const feature of zoneFC.features) {
+            const type = feature.properties.type
+            const verts = feature.geometry.coordinates[0]
+            verts.pop() // remove the duplicate vertex at the end
 
-        if (ids.length == 0) {
-            throw Error("No zone IDs returned")
-        }
-
-        const zoneGeometries = featureCollection.features.map(
-            feature => feature.geometry.coordinates[0]
-        )
-
-        for (let i = 0; i < ids.length; ++i) {
-            const overlappingSegments = await this.waysOverlappingZone([ids[i]], [zoneGeometries[i]])
-
-            await ZoneService.blockSegments(ids[i], overlappingSegments)
-        }
-
-        await ZoneService.updateblockedSegments()
-    }
-
-    async deleteZone(id) {
-        id = Number(id)
-
-        await this.repository.deleteZone(id)
-
-        blockedSegments.delete(id)
-
-        await ZoneService.updateblockedSegments()
-    }
-
-    /* zoneIds:        Array of the databse ids of the zones.
-     * zoneGeometries: Array of arrays of longitude-latitude
-     *                 pairs representing the geometries of
-     *                 the zones (SRID 4326).
-     * returns:        Array of pairs of node ids
-     *                 corresponding to the overlapping road
-     *                 segments. */
-    async waysOverlappingZone(zoneIds, zoneGeometries) {
-        const paths = await this.repository.getOverlappingPaths(zoneIds)
-        return await polygonalIntersections(paths, zoneGeometries)
-    }
-
-    async waysOverlappingAnyZone() {
-        const { paths, zones } = await this.repository.getAllZonesAndOverlappingPaths()
-        return await polygonalIntersections(paths, zones)
-    }
-
-    static async blockSegments(zoneID, segments) {
-        if (!blockedSegments.has(zoneID)) {
-            blockedSegments.set(zoneID, new Set())
-        }
-
-        const zoneSegments = blockedSegments.get(zoneID)
-
-        for (const [a, b] of segments) {
-            zoneSegments.add(a < b ? [a, b] : [b, a])
-        }
-    }
-
-    static async updateblockedSegments() {
-        let lines = []
-
-        for (const zoneSegments of blockedSegments.values()) {
-            for (const [a, b] of zoneSegments) {
-                lines.push(`${a.id},${b.id},0\n${b.id},${a.id},0`)
+            if (type === "roadblock") {
+                roadblockPolygons.push({verts: verts})
+            } else {
+                speedzonePolygons.push({
+                    verts: verts,
+                    type: type,
+                    effectValue: feature.properties.effect_value
+                })
             }
         }
 
-        const csv = lines.join('\n')
-        const filename = "routing-api-segments.csv"
+        process.stdout.write("calculating segments speeds...")
 
+        let newSegments = await calculateSegmentSpeeds(
+            roadblockPolygons,
+            [],
+            speedzonePolygons,
+            paths
+        )
+
+        console.log(" done")
+
+        let lines = []
+
+        // Restore the original speeds for segments that
+        // were affected previously but not anymore.
+        for (const segment of affectedSegments) {
+            const startID = segment.start.id
+            const endID   = segment.end.id
+
+            if (!newSegments.has(`${startID};${endID}`)) {
+                lines.push(`${startID},${endID},${segment.originalSpeed}`)
+                lines.push(`${endID},${startID},${segment.originalSpeed}`)
+            }
+        }
+
+        affectedSegments = Array.from(newSegments.values())
+
+        // Set speeds for new segments
+        for (const segment of affectedSegments) {
+            const startID = segment.start.id
+            const endID   = segment.end.id
+
+            lines.push(`${startID},${endID},${segment.currentSpeed}`)
+            lines.push(`${endID},${startID},${segment.currentSpeed}`)
+        }
+
+        await ZoneService.writeCSV(lines.join('\n'))
+    }
+
+    async createZones(zones) {
+        this.changeZones(zones, [])
+    }
+
+    static async deleteZone(id) {
+        // no-op for now
+    }
+
+    static async writeCSV(csv) {
+        const filename = "/tmp/routing-api-segments.csv"
         const file = await open(filename, "w")
         await file.write(csv)
         await file.close()
 
-        const extract = spawn("osrm-extract", ["-p", `${PROFILES_PATH}/car.lua`, "./route-data.osm"])
-
-        extract.stdout.on("data", makeOutputReader("osrm-extract", process.stdout))
-        extract.stderr.on("data", makeOutputReader("osrm-extract", process.stderr))
-
-        const waitExtract = new Promise((resolve, reject) => {
-            extract.on("exit", (code, signal) => {
-                if (code != 0) {
-                    reject()
-                    return
-                }
-
-                resolve()
-            })
-        })
-
-        await waitExtract
+        console.log("wrote CSV file")
 
         const contract = spawn("osrm-contract", ["--segment-speed-file", filename, "route-data.osrm"])
 
