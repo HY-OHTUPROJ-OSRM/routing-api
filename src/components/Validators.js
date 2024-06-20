@@ -28,7 +28,7 @@ gjv.define("Feature", (feature) => {
     if (feature.properties && feature.properties.type) {
         const type = feature.properties.type
 
-        if (!["roadblock"].includes(type)) {
+        if (!["offset", "factor", "cap", "constant", "roadblock"].includes(type)) {
             errors.push("Unsupported zone type.")
         }
     }
