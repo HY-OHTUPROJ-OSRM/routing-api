@@ -6,8 +6,6 @@ const validator = require("../components/Validators")
 const { makeOutputReader } = require("../utils/process_utils")
 const { PROFILES_PATH } = require("../utils/config")
 
-let blockedSegments = []
-
 function binaryWriter(stream) {
     return {
         writeUInt8: (n) => {
@@ -151,42 +149,49 @@ async function calculateSegmentSpeeds(
     return result
 }
 
+// All modifications to this must be atomic at the level of JS execution!
+affectedSegments = []
+
 class ZoneService {
+    constructor(repository = new ZoneRepository()) {
+        this.repository = repository
+    }
+
     static async init() {
-        await ZoneService.updateBlockedSegments()
+        await new ZoneService().updateBlockedSegments()
     }
 
     static async getBlockedSegments() {
-        return blockedSegments;
+        return affectedSegments;
     }
 
-    static async getZones() {
-        return await ZoneRepository.getZones()
+    async getZones() {
+        return await this.repository.getZones()
     }
 
-    static async changeZones(newZones, deletedZones) {
+    async changeZones(newZones, deletedZones) {
         for (const zone of newZones) {
             delete zone.properties.id
 
-            await ZoneRepository.createZone(zone)
+            await this.repository.createZone(zone)
         }
 
         console.log(`${newZones ? newZones.length : 0} zones created`)
 
-        await ZoneRepository.deleteZones(deletedZones)
+        await this.repository.deleteZones(deletedZones)
 
         console.log(`${deletedZones ? deletedZones.length : 0} zones deleted`)
 
-        await ZoneService.updateBlockedSegments()
+        await this.updateBlockedSegments()
     }
 
-    static async updateBlockedSegments() {
+    async updateBlockedSegments() {
         process.stdout.write("fetching all current zones...")
-        const zoneFC = await ZoneRepository.getZones()
+        const zoneFC = await this.repository.getZones()
         console.log(" done")
 
         process.stdout.write("fetching all paths overlapping zones...")
-        const paths = await ZoneRepository.getPathsOverlappingZones()
+        const paths = await this.repository.getPathsOverlappingZones()
         console.log(" done")
 
         let roadblockPolygons = []
@@ -223,7 +228,7 @@ class ZoneService {
 
         // Restore the original speeds for segments that
         // were affected previously but not anymore.
-        for (const segment of blockedSegments) {
+        for (const segment of affectedSegments) {
             const startID = segment.start.id
             const endID   = segment.end.id
 
@@ -233,10 +238,10 @@ class ZoneService {
             }
         }
 
-        blockedSegments = Array.from(newSegments.values())
+        affectedSegments = Array.from(newSegments.values())
 
         // Set speeds for new segments
-        for (const segment of blockedSegments) {
+        for (const segment of affectedSegments) {
             const startID = segment.start.id
             const endID   = segment.end.id
 
@@ -247,38 +252,8 @@ class ZoneService {
         await ZoneService.writeCSV(lines.join('\n'))
     }
 
-    static async createZones(zones) {
-        changeZones(zones, [])
-
-        /*
-        const errors = validator.valid(featureCollection, true)
-
-        if (errors.length > 0) {
-            throw Error(errors[0])
-        }
-
-        const ids = []
-
-        for (const feature of featureCollection.features) {
-            ids.push(await ZoneRepository.createZone(feature))
-        }
-
-        if (ids.length == 0) {
-            throw Error("No zone IDs returned")
-        }
-
-        const zoneGeometries = featureCollection.features.map(
-            feature => feature.geometry.coordinates[0]
-        )
-
-        for (let i = 0; i < ids.length; ++i) {
-            const overlappingSegments = await ZoneService.waysOverlappingZone([ids[i]], [zoneGeometries[i]])
-
-            await ZoneService.blockSegments(ids[i], overlappingSegments)
-        }
-
-        await ZoneService.writeCSV()
-        */
+    async createZones(zones) {
+        this.changeZones(zones, [])
     }
 
     static async deleteZone(id) {

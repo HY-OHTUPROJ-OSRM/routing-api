@@ -1,8 +1,12 @@
-const sql = require("../utils/database")
+const databaseConnection = require("../utils/database")
 
 class ZoneRepository {
-    static async getZones() {
-        const zoneResult = await sql`
+    constructor(sql = databaseConnection) {
+        this.sql = sql
+    }
+
+    async getZones() {
+        const zoneResult = await this.sql`
             WITH gps_zones AS (
                 SELECT id, type, effect_value, name, ST_Transform(geom, 4326)
                 FROM zones
@@ -16,14 +20,14 @@ class ZoneRepository {
         return zoneResult[0].json_build_object
     }
 
-    static async createZone(zone) {
+    async createZone(zone) {
         let effectValue = zone.properties.effectValue
 
         if (effectValue === undefined) {
             effectValue = null
         }
 
-        const result = await sql`
+        const result = await this.sql`
             INSERT INTO zones (type, name, effect_value, geom)
             VALUES (
                 ${zone.properties.type},
@@ -36,16 +40,16 @@ class ZoneRepository {
         return result[0].id
     }
 
-    static async deleteZones(ids) {
+    async deleteZones(ids) {
         if (!ids) return
 
-        await sql`
-            DELETE FROM zones WHERE id IN ${ sql(ids) }
+        await this.sql`
+            DELETE FROM zones WHERE id IN ${ this.sql(ids) }
         `
     }
 
-    static async getPathsOverlappingZones() {
-        const result = await sql`
+    async getPathsOverlappingZones() {
+        const result = await this.sql`
             WITH unnested_nodes AS (
                 SELECT
                     ways.id AS way_id,
