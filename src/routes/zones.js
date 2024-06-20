@@ -1,5 +1,6 @@
 const { Router } = require("express")
 const ZoneService = require("../services/ZoneService")
+const StatusService = require("../services/StatusService")
 const ZoneRepository = require("../repositories/ZoneRepository")
 const validator = require("../components/Validators")
 const databaseConnection = require("../utils/database.js")
@@ -17,8 +18,9 @@ function acquireZoneRouterLock() {
         return false;
     }
 
-    lockHeld = true;
-    return true;
+	  lockHeld = true;
+    StatusService.startJob()
+	  return true;
 }
 
 function releaseZoneRouterLock() {
@@ -26,7 +28,8 @@ function releaseZoneRouterLock() {
         throw new Error("called releaseZoneRouterLock() while lock wasn't held")
     }
 
-    lockHeld = false;
+    StatusService.endJob()
+	  lockHeld = false;
 }
 
 zoneRouter.get("/", async (req, res) => {
