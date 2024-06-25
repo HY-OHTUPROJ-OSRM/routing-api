@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const StatusService = require("../services/StatusService")
-const { v4: uuidv4 } = require('uuid')
+const { uid } = require("uid")
 
 const statusRouter = Router()
 
@@ -15,7 +15,7 @@ statusRouter.get("/", async (req, res) => {
 
     res.write(`data: ${JSON.stringify(StatusService.getStatus())}\n\n`)
 
-    const id = uuidv4()
+    const id = uid()
 
     StatusService.addListener(id, res)
 
