@@ -26,6 +26,12 @@ const startServer = async () => {
 const osrm = spawn("osrm-routed", ["--shared-memory", "--algorithm", "ch"])
 var started = false;
 
+process.on("uncaughtException", (err, origin) => {
+	osrm.kill()
+	console.error(err)
+	process.exit(1)
+})
+
 osrm.stdout.on("data", (output) => {
     process.stdout.write(formatOutput("osrm-routed", output))
 
