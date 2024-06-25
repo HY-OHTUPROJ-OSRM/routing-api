@@ -186,12 +186,16 @@ class ZoneService {
     }
 
     async updateBlockedSegments() {
-        process.stdout.write("fetching all current zones...")
-        const zoneFC = await this.repository.getZones()
-        console.log(" done")
-
         process.stdout.write("fetching all paths overlapping zones...")
         const paths = await this.repository.getPathsOverlappingZones()
+        console.log(" done")
+
+        if (!paths.length) {
+            return
+        }
+
+        process.stdout.write("fetching all current zones...")
+        const zoneFC = await this.repository.getZones()
         console.log(" done")
 
         let roadblockPolygons = []
