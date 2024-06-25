@@ -1,6 +1,10 @@
 create_sql="
 CREATE TABLE IF NOT EXISTS zones (
-	id SERIAL PRIMARY KEY, type TEXT, name TEXT, effect_value DOUBLE PRECISION, geom GEOMETRY(POLYGON, 3857)
+	id SERIAL PRIMARY KEY,
+        type TEXT,
+        name TEXT,
+        effect_value DOUBLE PRECISION,
+        geom GEOMETRY(POLYGON, 3857) CHECK (ST_IsValid(geom))
 );
 CREATE INDEX IF NOT EXISTS sidx_zones_geom ON zones USING GIST(geom);
 "
