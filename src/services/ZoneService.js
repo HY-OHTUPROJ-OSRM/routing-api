@@ -2,9 +2,8 @@ const { spawn } = require("child_process")
 const { open, unlink } = require("fs").promises
 
 const ZoneRepository = require("../repositories/ZoneRepository")
-const validator = require("../components/Validators")
 const { makeOutputReader } = require("../utils/process_utils")
-const { PROFILES_PATH } = require("../utils/config")
+const { ROUTE_DATA_PATH } = require("../utils/config")
 
 function binaryWriter(stream) {
     return {
@@ -268,7 +267,7 @@ class ZoneService {
 
         console.log("wrote CSV file")
 
-        const contract = spawn("osrm-contract", ["--segment-speed-file", filename, "route-data.osrm"])
+        const contract = spawn("osrm-contract", ["--segment-speed-file", filename, ROUTE_DATA_PATH])
 
         contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout))
         contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr))
@@ -282,7 +281,7 @@ class ZoneService {
                     return
                 }
 
-                const datastore = spawn("osrm-datastore", ["route-data.osrm"])
+                const datastore = spawn("osrm-datastore", [ROUTE_DATA_PATH])
 
                 datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout))
                 datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr))
