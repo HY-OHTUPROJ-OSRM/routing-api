@@ -2,7 +2,7 @@ FROM ghcr.io/project-osrm/osrm-backend:v5.27.1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends npm postgresql-client osm2pgsql build-essential git && \
-    git clone --depth 1 --branch v2.0.0 https://github.com/HY-OHTUPROJ-OSRM/Polygonal-Intersections.git /Polygonal-Intersections && \
+    git clone --depth 1 --branch v2.0.1 https://github.com/HY-OHTUPROJ-OSRM/Polygonal-Intersections.git /Polygonal-Intersections && \
     cd /Polygonal-Intersections && \
     make cli && \
     apt-get remove -y build-essential git && \
