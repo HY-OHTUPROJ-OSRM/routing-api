@@ -8,6 +8,8 @@ cd osrm-backend
 docker build -f docker/Dockerfile-debian -t osrm-backend-debian:v6.0.0 .
 ```
 ```
-./buildmac
+cd ..
 ```
-
+```
+./buildmac.sh
+```
