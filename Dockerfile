@@ -1,4 +1,4 @@
-FROM osrm-backend-debian:v6.0.0
+FROM osrm-backend:v6.0.0-debian
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends npm postgresql-client osm2pgsql build-essential git && \
