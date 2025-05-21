@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS temporary_routes(
         type TEXT,
         name TEXT,
         status BOOLEAN DEFAULT true,
-        tags TEXT[],
+        tags JSONB DEFAULT '[]',
         start_node INTEGER,
         end_node INTEGER,
         length DOUBLE PRECISION,

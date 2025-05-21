@@ -1,6 +1,5 @@
 const { Router } = require("express");
 const TempRoadRepository = require("../repositories/TempRoadRepository");
-const validator = require("../components/Validators");
 
 const tempsRouter = Router();
 const repo = new TempRoadRepository();
@@ -11,23 +10,23 @@ tempsRouter.get("/", async (req, res) => {
     const temps = await repo.getAll();
     res.json(temps);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching temps", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching temps", error: error.message });
   }
 });
 
 // Create a new temporary road
 tempsRouter.post("/", async (req, res) => {
   const data = req.body;
-  const errors = validator.valid(data, true);
-  if (errors.length) {
-    return res.status(400).json({ message: "Invalid payload", error: errors[0] });
-  }
 
   try {
     const newTemp = await repo.create(data);
     res.status(201).json(newTemp);
   } catch (error) {
-    res.status(500).json({ message: "Error creating temp", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error creating temp", error: error.message });
   }
 });
 
@@ -41,7 +40,9 @@ tempsRouter.get("/:id", async (req, res) => {
     }
     res.json(temp);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching temp", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching temp", error: error.message });
   }
 });
 
@@ -53,7 +54,9 @@ tempsRouter.patch("/:id", async (req, res) => {
     const updated = await repo.update(id, updates);
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ message: "Error updating temp", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error updating temp", error: error.message });
   }
 });
 
@@ -64,7 +67,9 @@ tempsRouter.delete("/:id", async (req, res) => {
     await repo.delete(id);
     res.json({ message: `Temp with id ${id} deleted` });
   } catch (error) {
-    res.status(500).json({ message: "Error deleting temp", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error deleting temp", error: error.message });
   }
 });
 
@@ -75,7 +80,9 @@ tempsRouter.post("/:id/toggle", async (req, res) => {
     const toggled = await repo.toggleActive(id);
     res.json(toggled);
   } catch (error) {
-    res.status(500).json({ message: "Error toggling temp", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error toggling temp", error: error.message });
   }
 });
 
