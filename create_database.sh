@@ -11,18 +11,18 @@ CREATE TABLE IF NOT EXISTS temporary_routes(
         type TEXT,
         name TEXT,
         status BOOLEAN DEFAULT true,
-        tags TEXT[],
+        tags JSONB DEFAULT '[]',
         start_node INTEGER,
         end_node INTEGER,
         length DOUBLE PRECISION,
         speed INTEGER,
         description TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_temp_routes_start_node ON temporary_routes USING GIST(start_node);
-CREATE INDEX IF NOT EXISTS idx_temp_routes_end_node ON temporary_routes USING GIST(end_node);
+CREATE INDEX IF NOT EXISTS idx_temp_routes_start_node ON temporary_routes(start_node);
+CREATE INDEX IF NOT EXISTS idx_temp_routes_end_node ON temporary_routes(end_node);
 CREATE INDEX IF NOT EXISTS sidx_zones_geom ON zones USING GIST(geom);
 "
 
