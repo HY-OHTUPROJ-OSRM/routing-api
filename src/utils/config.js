@@ -1,5 +1,6 @@
 const PORT = process.env.PORT || 3000
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000"
+const OSRM_BACKEND_PORT = process.env.OSRM_BACKEND_PORT || 5000;
 const DATABASE_HOST = process.env.DATABASE_HOST || ""
 const DATABASE_PORT = process.env.DATABASE_PORT || ""
 const DATABASE_DB = process.env.DATABASE_DB || ""
@@ -12,6 +13,7 @@ const ROUTE_DATA_PATH = process.env.ROUTE_DATA_PATH || "./route-data.osm"
 module.exports = {
     PORT,
     BACKEND_URL,
+    OSRM_BACKEND_PORT,
     DATABASE_HOST,
     DATABASE_PORT,
     DATABASE_DB,
