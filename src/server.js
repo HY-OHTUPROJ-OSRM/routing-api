@@ -7,6 +7,7 @@ const { BACKEND_URL } = require('./utils/config')
 const zoneRouter = require("./routes/zones")
 const segmentRouter = require("./routes/segments")
 const statusRouter = require("./routes/status")
+const disconnectedLinksRouter = require("./routes/disconnected_links");
 
 const server = express()
 
@@ -22,5 +23,6 @@ server.use("/tile", proxy(`${BACKEND_URL}/tile`, {
 server.use("/zones", zoneRouter)
 server.use("/segments", segmentRouter)
 server.use("/status", statusRouter)
+server.use("/disconnected_links", disconnectedLinksRouter);
 
 module.exports = server
