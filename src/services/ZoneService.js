@@ -2,156 +2,16 @@ const { spawn } = require("child_process")
 const { open, unlink } = require("fs").promises
 
 const ZoneRepository = require("../repositories/ZoneRepository")
+const calculateSegmentSpeeds = require("../utils/segment_speeds")
 const { makeOutputReader } = require("../utils/process_utils")
 const { ROUTE_DATA_PATH } = require("../utils/config")
 
-function binaryWriter(stream) {
-    return {
-        writeUInt8: (n) => {
-            buffer = Buffer.alloc(1)
-            buffer.writeUInt8(n)
-            stream.write(buffer)
-        },
-        writeUInt16: (n) => {
-            buffer = Buffer.alloc(2)
-            buffer.writeUInt16LE(n)
-            stream.write(buffer)
-        },
-        writeUInt64: (n) => {
-            buffer = Buffer.alloc(8)
-            buffer.writeBigUInt64LE(BigInt(n))
-            stream.write(buffer)
-        },
-        writeDouble: (x) => {
-            buffer = Buffer.alloc(8)
-            buffer.writeDoubleLE(x)
-            stream.write(buffer)
-        },
-        writeVertex: (x, y) => {
-            buffer = Buffer.alloc(8)
-            buffer.writeInt32LE(x, 0)
-            buffer.writeInt32LE(y, 4)
-            stream.write(buffer)
-        }
-    }
-}
-
-async function calculateSegmentSpeeds(
-    roadblockPolygons,
-    roadblockPolylines,
-    speedzonePolygons,
-    paths
-) {
-    const child = spawn("Polygonal-Intersections-CLI")
-    const { writeUInt8, writeUInt16, writeUInt64, writeDouble, writeVertex } = binaryWriter(child.stdin)
-    const resultSegments = new Map()
-
-    const result = new Promise((resolve, reject) => {
-        child.stdout.on("end", () => {
-            for (let [key, segment] of resultSegments) {
-                if (segment.currentSpeed === null) {
-                    resultSegments.delete(key);
-                }
-            }
-
-            resolve(resultSegments)
-        })
-    })
-
-    child.stdout.on("readable", () => {
-        const size = 3 * 8;
-
-        for (let to_read = child.stdout.readableLength; to_read >= size; to_read -= size) {
-
-            let buffer = child.stdout.read(size)
-            if (buffer === null) break
-
-            const startID = buffer.readBigUInt64LE(0x00)
-            const endID   = buffer.readBigUInt64LE(0x08)
-            const speed   = buffer.readDoubleLE   (0x10)
-
-            const key = `${startID};${endID}`
-            resultSegments.get(key).currentSpeed = speed
-        }
-    })
-
-    /* Write intersection program input.
-     * https://github.com/HY-OHTUPROJ-OSRM/osrm-project/wiki/Intersection-Algorithm */
-
-    // Header
-    writeUInt64(roadblockPolygons.length) // Roadblock polygons
-    writeUInt64(0) // Chain roadblocks
-    writeUInt64(speedzonePolygons.length) // Speed zone polygons
-    writeUInt64(paths.length) // Paths
-
-    // Roadblock polygons
-    for (const polygon of roadblockPolygons) {
-        writeUInt64(polygon.verts.length)
-
-        for (const vert of polygon.verts) {
-            writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
-        }
-    }
-
-    // See the enum in https://github.com/HY-OHTUPROJ-OSRM/Polygonal-Intersections/blob/dev/source/algorithm/traffic.h
-    const types = {offset: 0, factor: 1, cap: 2, constant: 3}
-
-    // Speed zone polygons
-    for (const polygon of speedzonePolygons) {
-        writeUInt8(types[polygon.type])
-        writeDouble(polygon.effectValue)
-        writeUInt64(polygon.verts.length)
-
-        for (const vert of polygon.verts) {
-            writeVertex(vert[0] * 10_000_000, vert[1] * 10_000_000)
-        }
-    }
-
-    // Paths
-    for (const path of paths) {
-        nodesMap = path.nodes
-
-        writeUInt16(path.speed)
-        writeUInt64(nodesMap.size)
-
-        let startID = null
-        let startCoords = null
-
-        for (const [endID, endCoords] of nodesMap) {
-            if (startID !== null) {
-                const key = `${startID};${endID}`
-
-                resultSegments.set(key, {
-                    start: {
-                        id: startID,
-                        lat: startCoords.lat / 10_000_000,
-                        lon: startCoords.lon / 10_000_000
-                    },
-                    end: {
-                        id: endID,
-                        lat: endCoords.lat / 10_000_000,
-                        lon: endCoords.lon / 10_000_000
-                    },
-                    originalSpeed: Number(path.speed),
-                    currentSpeed: null
-                })
-            }
-
-            writeUInt64(endID)
-            writeVertex(endCoords.lon, endCoords.lat)
-
-            startID = endID
-            startCoords = endCoords
-        }
-    }
-
-    return result
-}
 
 // All modifications to this must be atomic at the level of JS execution!
-affectedSegments = []
 
 class ZoneService {
+    static affectedSegments = []
+
     constructor(repository = new ZoneRepository()) {
         this.repository = repository
     }
@@ -161,7 +21,7 @@ class ZoneService {
     }
 
     static async getBlockedSegments() {
-        return affectedSegments;
+        return ZoneService.affectedSegments;
     }
 
     async getZones() {
@@ -202,7 +62,7 @@ class ZoneService {
             verts.pop() // remove the duplicate vertex at the end
 
             if (type === "roadblock") {
-                roadblockPolygons.push({verts: verts})
+                roadblockPolygons.push({ verts: verts })
             } else {
                 speedzonePolygons.push({
                     verts: verts,
@@ -227,9 +87,9 @@ class ZoneService {
 
         // Restore the original speeds for segments that
         // were affected previously but not anymore.
-        for (const segment of affectedSegments) {
+        for (const segment of ZoneService.affectedSegments) {
             const startID = segment.start.id
-            const endID   = segment.end.id
+            const endID = segment.end.id
 
             if (!newSegments.has(`${startID};${endID}`)) {
                 lines.push(`${startID},${endID},${segment.originalSpeed}`)
@@ -237,12 +97,12 @@ class ZoneService {
             }
         }
 
-        affectedSegments = Array.from(newSegments.values())
+        ZoneService.affectedSegments = Array.from(newSegments.values())
 
         // Set speeds for new segments
-        for (const segment of affectedSegments) {
+        for (const segment of ZoneService.affectedSegments) {
             const startID = segment.start.id
-            const endID   = segment.end.id
+            const endID = segment.end.id
 
             lines.push(`${startID},${endID},${segment.currentSpeed}`)
             lines.push(`${endID},${startID},${segment.currentSpeed}`)

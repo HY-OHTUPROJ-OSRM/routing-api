@@ -6,9 +6,10 @@ const { makeOutputReader } = require("../utils/process_utils");
 const { ROUTE_DATA_PATH } = require("../utils/config");
 
 // All modifications to this must be atomic at the level of JS execution!
-let activeTempRoads = [];
 
 class TempRoadService {
+  static activeTempRoads = [];
+
   constructor(repository = new TempRoadRepository()) {
     this.repository = repository;
   }
@@ -18,77 +19,109 @@ class TempRoadService {
   }
 
   static async getActiveTempRoads() {
-    return activeTempRoads;
+    return TempRoadService.activeTempRoads;
   }
 
   async getAllTempRoads() {
-    return await this.repository.getAll();
+    return this.repository.getAll();
   }
 
   async getTempRoadById(id) {
-    return await this.repository.getById(id);
+    return this.repository.getById(id);
   }
 
   async createTempRoad(data) {
-    const newRoad = await this.repository.create(data);
-    console.log(`New temporary road created with ID: ${newRoad.id}`);
-    
-    if (newRoad.status) {
-      await this.updateTempRoads();
+    try {
+      const newRoad = await this.repository.create(data);
+      console.log(`New temporary road created with ID: ${newRoad.id}`);
+      if (newRoad.status) {
+        await this.updateTempRoads();
+      }
+      return newRoad;
+    } catch (err) {
+      console.error("Failed to create temporary road:", err);
+      throw err;
     }
-    
-    return newRoad;
   }
 
   async updateTempRoad(id, updates) {
-    const updated = await this.repository.update(id, updates);
-    console.log(`Temporary road with ID ${id} updated`);
-    
-    await this.updateTempRoads();
-    return updated;
+    try {
+      const existing = await this.repository.getById(id);
+      if (!existing) {
+        throw new Error(`Temporary road with ID ${id} does not exist`);
+      }
+      const updated = await this.repository.update(id, updates);
+      console.log(`Temporary road with ID ${id} updated`);
+      await this.updateTempRoads();
+      return updated;
+    } catch (err) {
+      console.error(`Failed to update temporary road with ID ${id}:`, err);
+      throw err;
+    }
   }
 
   async deleteTempRoad(id) {
-    await this.repository.delete(id);
-    console.log(`Temporary road with ID ${id} deleted`);
-    
-    await this.updateTempRoads();
+    try {
+      const road = await this.repository.getById(id);
+      if (!road) {
+        throw new Error(`Temporary road with ID ${id} does not exist`);
+      }
+      await this.repository.delete(id);
+      console.log(`Temporary road with ID ${id} deleted`);
+      await this.updateTempRoads();
+    } catch (err) {
+      console.error(`Failed to delete temporary road with ID ${id}:`, err);
+      throw err;
+    }
   }
 
   async toggleTempRoadActive(id) {
-    const toggled = await this.repository.toggleActive(id);
-    console.log(`Temporary road with ID ${id} toggled to status: ${toggled.status}`);
-    
-    await this.updateTempRoads();
-    return toggled;
+    try {
+      const road = await this.repository.getById(id);
+      if (!road) {
+        throw new Error(`Temporary road with ID ${id} does not exist`);
+      }
+      const toggled = await this.repository.toggleActive(id);
+      console.log(`Temporary road with ID ${id} toggled to status: ${toggled.status}`);
+      await this.updateTempRoads();
+      return toggled;
+    } catch (err) {
+      console.error(`Failed to toggle temporary road with ID ${id}:`, err);
+      throw err;
+    }
   }
 
   async updateTempRoads() {
-    process.stdout.write("Fetching active temporary roads...");
-    const allRoads = await this.repository.getAll();
-    const activeRoads = allRoads.filter(road => road.status);
-    console.log(` done - found ${activeRoads.length} active roads`);
+    try {
+      process.stdout.write("Fetching active temporary roads...");
+      const allRoads = await this.repository.getAll();
+      const activeRoads = allRoads.filter(road => road.status);
+      console.log(` done - found ${activeRoads.length} active roads`);
 
-    activeTempRoads = activeRoads;
+      TempRoadService.activeTempRoads = activeRoads;
 
-    // Generate the CSV data for OSRM
-    let lines = [];
+      // Generate the CSV data for OSRM
+      let lines = [];
 
-    // Process all active temporary roads
-    for (const road of activeRoads) {
-      const startNodeId = road.start_node;
-      const endNodeId = road.end_node;
-      const speed = road.speed;
+      // Process all active temporary roads
+      for (const road of activeRoads) {
+        const startNodeId = road.start_node;
+        const endNodeId = road.end_node;
+        const speed = road.speed;
 
-      // Add bidirectional connections
-      lines.push(`${startNodeId},${endNodeId},${speed}`);
-      lines.push(`${endNodeId},${startNodeId},${speed}`);
-    }
+        // Add bidirectional connections
+        lines.push(`${startNodeId},${endNodeId},${speed}`);
+        lines.push(`${endNodeId},${startNodeId},${speed}`);
+      }
 
-    if (lines.length > 0) {
-      await TempRoadService.writeCSV(lines.join('\n'));
-    } else {
-      console.log("No active temporary roads found, skipping OSRM update");
+      if (lines.length > 0) {
+        await TempRoadService.writeCSV(lines.join('\n'));
+      } else {
+        console.log("No active temporary roads found, skipping OSRM update");
+      }
+    } catch (err) {
+      console.error("Failed to update temporary roads:", err);
+      throw err;
     }
   }
 
@@ -132,22 +165,19 @@ class TempRoadService {
     });
   }
 
-  // Add batch operations if needed
   async batchUpdateTempRoads(newRoads, deletedRoadIds) {
-    // Create new roads
-    for (const road of newRoads) {
-      await this.repository.create(road);
-    }
-    console.log(`${newRoads ? newRoads.length : 0} temporary roads created`);
+    try {
+      await Promise.all(newRoads.map(road => this.repository.create(road)));
+      console.log(`${newRoads ? newRoads.length : 0} temporary roads created`);
 
-    // Delete roads
-    for (const id of deletedRoadIds) {
-      await this.repository.delete(id);
-    }
-    console.log(`${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`);
+      await Promise.all(deletedRoadIds.map(id => this.repository.delete(id)));
+      console.log(`${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`);
 
-    // Update the routing data
-    await this.updateTempRoads();
+      await this.updateTempRoads();
+    } catch (err) {
+      console.error("Failed to batch update temporary roads:", err);
+      throw err;
+    }
   }
 }
 

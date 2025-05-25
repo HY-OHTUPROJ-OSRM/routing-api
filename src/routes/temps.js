@@ -1,13 +1,13 @@
 const { Router } = require("express");
-const TempRoadRepository = require("../repositories/TempRoadRepository");
+const TempRoadService = require("../services/TempRoadService");
 
 const tempsRouter = Router();
-const repo = new TempRoadRepository();
+const service = new TempRoadService();
 
 // List all temporary roads
 tempsRouter.get("/", async (req, res) => {
   try {
-    const temps = await repo.getAll();
+    const temps = await service.getAllTempRoads();
     res.json(temps);
   } catch (error) {
     res
@@ -21,7 +21,7 @@ tempsRouter.post("/", async (req, res) => {
   const data = req.body;
 
   try {
-    const newTemp = await repo.create(data);
+    const newTemp = await service.createTempRoad(data);
     res.status(201).json(newTemp);
   } catch (error) {
     res
@@ -34,7 +34,7 @@ tempsRouter.post("/", async (req, res) => {
 tempsRouter.get("/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const temp = await repo.getById(id);
+    const temp = await service.getTempRoadById(id);
     if (!temp) {
       return res.status(404).json({ message: "Temp not found" });
     }
@@ -51,7 +51,7 @@ tempsRouter.patch("/:id", async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
   try {
-    const updated = await repo.update(id, updates);
+    const updated = await service.updateTempRoad(id, updates);
     res.json(updated);
   } catch (error) {
     res
@@ -64,12 +64,14 @@ tempsRouter.patch("/:id", async (req, res) => {
 tempsRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    await repo.delete(id);
+    await service.deleteTempRoad(id);
     res.json({ message: `Temp with id ${id} deleted` });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error deleting temp", error: error.message });
+    if (error.message.includes("does not exist")) {
+      res.status(404).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: "Error deleting temp", error: error.message });
+    }
   }
 });
 
@@ -77,12 +79,14 @@ tempsRouter.delete("/:id", async (req, res) => {
 tempsRouter.post("/:id/toggle", async (req, res) => {
   const { id } = req.params;
   try {
-    const toggled = await repo.toggleActive(id);
+    const toggled = await service.toggleTempRoadActive(id);
     res.json(toggled);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error toggling temp", error: error.message });
+    if (error.message.includes("does not exist")) {
+      res.status(404).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: "Error toggling temp", error: error.message });
+    }
   }
 });
 

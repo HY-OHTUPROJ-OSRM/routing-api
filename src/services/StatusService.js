@@ -1,75 +1,73 @@
-var startTime
-var status = "none"
-var percentage = 0
-
-var prevRunTime
-
-const listeners = {}
-
 class StatusService {
+    static startTime = undefined;
+    static status = "none";
+    static percentage = 0;
+    static prevRunTime = undefined;
+    static listeners = {};
+
     static startJob() {
-        if (status == "none") {
-            startTime = new Date(Date.now())
-            status = "processing"
-            percentage = 0
-            StatusService.sendStatus()
+        if (StatusService.status == "none") {
+            StatusService.startTime = new Date(Date.now());
+            StatusService.status = "processing";
+            StatusService.percentage = 0;
+            StatusService.sendStatus();
         }
     }
 
     static async endJob() {
-        if (status == "processing") {
-            const runTime = Date.now() - Number(startTime)
+        if (StatusService.status == "processing") {
+            const runTime = Date.now() - Number(StatusService.startTime);
 
-            status = "completed"
-            percentage = 100
-            await StatusService.sendStatus()
+            StatusService.status = "completed";
+            StatusService.percentage = 100;
+            await StatusService.sendStatus();
 
-            prevRunTime = runTime
+            StatusService.prevRunTime = runTime;
 
-            status = "none"
-            percentage = 0
-            startTime = undefined
+            StatusService.status = "none";
+            StatusService.percentage = 0;
+            StatusService.startTime = undefined;
         }
     }
 
     static addListener(id, response) {
-        listeners[id] = response
+        StatusService.listeners[id] = response;
     }
 
     static removeListener(id) {
-        delete listeners[id]
+        delete StatusService.listeners[id];
     }
 
     static async sendStatus() {
-        Object.values(listeners).forEach(res => {
-            res.write(`data: ${JSON.stringify(StatusService.getStatus())}\n\n`)
-        })
+        Object.values(StatusService.listeners).forEach(res => {
+            res.write(`data: ${JSON.stringify(StatusService.getStatus())}\n\n`);
+        });
     }
 
     static progress() {
-        if (status == "processing") {
-            percentage = Math.min(percentage + 10, 99)
-            StatusService.sendStatus()
+        if (StatusService.status == "processing") {
+            StatusService.percentage = Math.min(StatusService.percentage + 10, 99);
+            StatusService.sendStatus();
         }
     }
 
     static getEstimate() {
-        if (startTime && prevRunTime) {
-            return (new Date(Number(startTime) + prevRunTime)).toISOString()
+        if (StatusService.startTime && StatusService.prevRunTime) {
+            return (new Date(Number(StatusService.startTime) + StatusService.prevRunTime)).toISOString();
         } else {
-            return undefined
+            return undefined;
         }
     }
 
     static getStatus() {
         return {
-            status,
+            status: StatusService.status,
             progress: {
-                percentage,
+                percentage: StatusService.percentage,
                 estimate: StatusService.getEstimate()
             }
-        }
+        };
     }
 }
 
-module.exports = StatusService
+module.exports = StatusService;
