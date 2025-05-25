@@ -51,6 +51,39 @@ class TempRoadRepository {
     return result[0];
   }
 
+  async update(id, updates) {
+    // Build dynamic SET clause
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    for (const [key, value] of Object.entries(updates)) {
+      fields.push(`${key} = $${idx}`);
+      values.push(value);
+      idx++;
+    }
+
+    if (fields.length === 0) {
+      throw new Error("No fields to update");
+    }
+
+    // Always update updated_at
+    fields.push(`updated_at = NOW()`);
+
+    const query = `
+      UPDATE temporary_routes
+      SET ${fields.join(", ")}
+      WHERE id = $${idx}
+      RETURNING id, type, name, status, tags, start_node, end_node,
+        length, speed, description, created_at, updated_at;
+    `;
+
+    values.push(id);
+
+    const result = await this.sql.unsafe(query, values);
+    return result[0] || null;
+  }
+
   async delete(id) {
     await this.sql`
       DELETE FROM temporary_routes WHERE id = ${id};
