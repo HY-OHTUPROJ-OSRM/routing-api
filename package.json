@@ -17,6 +17,7 @@
     "express": "^4.19.2",
     "express-http-proxy": "^2.0.0",
     "geojson-validation": "^1.0.2",
+    "helmet": "^8.1.0",
     "postgres": "^3.4.4",
     "uid": "^2.0.2"
   },
