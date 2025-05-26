@@ -3,12 +3,21 @@ const ZoneService = require("../services/ZoneService");
 const StatusService = require("../services/StatusService");
 const ZoneRepository = require("../repositories/ZoneRepository");
 const validator = require("../components/Validators");
-const databaseConnection = require("../utils/database.js");
 
 const zoneRouter = Router();
+const zoneService = new ZoneService();
 
 const handleError = (res, message, error, status = 500) => {
   res.status(status).json({ message, error: error?.message || error });
+};
+
+const validateFeatureCollection = (data, res) => {
+  const errors = validator.valid(data, true);
+  if (errors.length > 0) {
+    handleError(res, "Invalid request payload.", errors[0], 400);
+    return false;
+  }
+  return true;
 };
 
 /* Because routes are handled in a single thread, the locking
@@ -33,7 +42,7 @@ function releaseZoneRouterLock() {
 
 zoneRouter.get("/", async (req, res) => {
   try {
-    const zones = await new ZoneService().getZones();
+    const zones = await zoneService.getZones();
     res.json(zones);
   } catch (error) {
     handleError(res, "An error occurred while getting zones", error);
@@ -42,14 +51,13 @@ zoneRouter.get("/", async (req, res) => {
 
 zoneRouter.post("/diff", async (req, res) => {
   const { added, deleted } = req.body;
-  const errors = validator.valid(
-    { type: "FeatureCollection", features: added },
-    true
-  );
-
-  if (errors.length > 0) {
-    return handleError(res, "Invalid request payload.", errors[0], 400);
-  }
+  if (
+    !validateFeatureCollection(
+      { type: "FeatureCollection", features: added },
+      res
+    )
+  )
+    return;
 
   if (!acquireZoneRouterLock()) {
     // TODO set Retry-After header!
@@ -75,13 +83,10 @@ zoneRouter.post("/diff", async (req, res) => {
 
 zoneRouter.post("/", async (req, res) => {
   const featureCollection = req.body;
+  if (!validateFeatureCollection(featureCollection, res)) return;
 
   try {
-    const errors = validator.valid(featureCollection, true);
-    if (errors.length > 0) {
-      return res.status(400).send(errors[0].message);
-    }
-    await req.zoneService.createZones(featureCollection);
+    await zoneService.createZones(featureCollection.features);
     res.status(201).send();
   } catch (error) {
     handleError(res, "An error occurred while creating zones", error);
@@ -91,7 +96,7 @@ zoneRouter.post("/", async (req, res) => {
 zoneRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    await req.zoneService.deleteZone(id);
+    await ZoneService.deleteZone(id);
     res
       .status(200)
       .json({ message: `Zone with id ${id} deleted successfully` });

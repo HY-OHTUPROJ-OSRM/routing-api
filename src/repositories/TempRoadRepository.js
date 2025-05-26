@@ -3,26 +3,37 @@ const databaseConnection = require("../utils/database");
 class TempRoadRepository {
   constructor() {
     this.sql = databaseConnection;
-    this.transactionOngoing = false;
   }
 
   async getAll() {
-    const result = await this.sql`
-      SELECT id, type, name, status, tags, start_node, end_node,
-      length, speed, description, created_at, updated_at
-      FROM temporary_routes;
-    `;
-    return result;
+    try {
+      return await this.sql`
+        SELECT
+          id, type, name, status, tags, start_node, end_node,
+          length, speed, description, created_at, updated_at
+        FROM
+          temporary_routes;
+      `;
+    } catch (err) {
+      throw new Error(`Failed to fetch all temporary routes: ${err.message}`);
+    }
   }
 
   async getById(id) {
-    const result = await this.sql`
-      SELECT id, type, name, status, tags, start_node, end_node,
-      length, speed, description, created_at, updated_at
-      FROM temporary_routes
-      WHERE id = ${id};
-    `;
-    return result[0] || null;
+    try {
+      const result = await this.sql`
+        SELECT
+          id, type, name, status, tags, start_node, end_node,
+          length, speed, description, created_at, updated_at
+        FROM
+          temporary_routes
+        WHERE
+          id = ${id};
+      `;
+      return result[0] || null;
+    } catch (err) {
+      throw new Error(`Failed to fetch temporary route by id: ${err.message}`);
+    }
   }
 
   async create(data) {
@@ -38,68 +49,111 @@ class TempRoadRepository {
       description = null,
     } = data;
 
-    const result = await this.sql`
-      INSERT INTO temporary_routes
-      (type, name, status, tags, start_node, end_node,
-      length, speed, description)
-      VALUES
-      (${type}, ${name}, ${status}, ${this.sql(tags)},
-      ${start_node}, ${end_node}, ${length}, ${speed}, ${description})
-      RETURNING id, type, name, status, tags, start_node, end_node,
-      length, speed, description, created_at, updated_at;
-    `;
-    return result[0];
+    try {
+      const result = await this.sql`
+        INSERT INTO temporary_routes (
+          type, name, status, tags, start_node, end_node,
+          length, speed, description
+        )
+        VALUES (
+          ${type}, ${name}, ${status}, ${this.sql(tags)},
+          ${start_node}, ${end_node}, ${length}, ${speed}, ${description}
+        )
+        RETURNING
+          id, type, name, status, tags, start_node, end_node,
+          length, speed, description, created_at, updated_at;
+      `;
+      return result[0];
+    } catch (err) {
+      throw new Error(`Failed to create temporary route: ${err.message}`);
+    }
   }
 
   async update(id, updates) {
-    // Build dynamic SET clause
-    const fields = [];
+    if (!updates || Object.keys(updates).length === 0) {
+      throw new Error("No fields to update");
+    }
+
+    const allowedFields = [
+      "type",
+      "name",
+      "status",
+      "tags",
+      "start_node",
+      "end_node",
+      "length",
+      "speed",
+      "description",
+    ];
+    const setClauses = [];
     const values = [];
     let idx = 1;
 
     for (const [key, value] of Object.entries(updates)) {
-      fields.push(`${key} = $${idx}`);
+      if (!allowedFields.includes(key)) continue;
+      setClauses.push(`${key} = $${idx++}`);
       values.push(value);
-      idx++;
     }
 
-    if (fields.length === 0) {
-      throw new Error("No fields to update");
+    if (setClauses.length === 0) {
+      throw new Error("No valid fields to update");
     }
 
-    // Always update updated_at
-    fields.push(`updated_at = NOW()`);
+    setClauses.push(`updated_at = NOW()`);
+    values.push(id);
 
     const query = `
       UPDATE temporary_routes
-      SET ${fields.join(", ")}
-      WHERE id = $${idx}
-      RETURNING id, type, name, status, tags, start_node, end_node,
+      SET
+        ${setClauses.join(",\n        ")}
+      WHERE
+        id = $${idx}
+      RETURNING
+        id, type, name, status, tags, start_node, end_node,
         length, speed, description, created_at, updated_at;
     `;
 
-    values.push(id);
-
-    const result = await this.sql.unsafe(query, values);
-    return result[0] || null;
+    try {
+      const result = await this.sql.unsafe(query, values);
+      return result[0] || null;
+    } catch (err) {
+      throw new Error(`Failed to update temporary route: ${err.message}`);
+    }
   }
 
   async delete(id) {
-    await this.sql`
-      DELETE FROM temporary_routes WHERE id = ${id};
-    `;
+    try {
+      await this.sql`
+        DELETE FROM
+          temporary_routes
+        WHERE
+          id = ${id};
+      `;
+    } catch (err) {
+      throw new Error(`Failed to delete temporary route: ${err.message}`);
+    }
   }
 
   async toggleActive(id) {
-    const result = await this.sql`
-      UPDATE temporary_routes
-      SET status = NOT status,
-      updated_at = NOW()
-      WHERE id = ${id}
-      RETURNING id, type, name, status, tags, start_node, end_node,
-      length, speed, description, created_at, updated_at;
-    `;
-    return result[0];
+    try {
+      const result = await this.sql`
+        UPDATE
+          temporary_routes
+        SET
+          status = NOT status,
+          updated_at = NOW()
+        WHERE
+          id = ${id}
+        RETURNING
+          id, type, name, status, tags, start_node, end_node,
+          length, speed, description, created_at, updated_at;
+      `;
+      return result[0];
+    } catch (err) {
+      throw new Error(
+        `Failed to toggle temporary route status: ${err.message}`
+      );
+    }
   }
 }
 

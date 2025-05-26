@@ -82,7 +82,9 @@ class TempRoadService {
         throw new Error(`Temporary road with ID ${id} does not exist`);
       }
       const toggled = await this.repository.toggleActive(id);
-      console.log(`Temporary road with ID ${id} toggled to status: ${toggled.status}`);
+      console.log(
+        `Temporary road with ID ${id} toggled to status: ${toggled.status}`
+      );
       await this.updateTempRoads();
       return toggled;
     } catch (err) {
@@ -95,7 +97,7 @@ class TempRoadService {
     try {
       process.stdout.write("Fetching active temporary roads...");
       const allRoads = await this.repository.getAll();
-      const activeRoads = allRoads.filter(road => road.status);
+      const activeRoads = allRoads.filter((road) => road.status);
       console.log(` done - found ${activeRoads.length} active roads`);
 
       TempRoadService.activeTempRoads = activeRoads;
@@ -115,7 +117,7 @@ class TempRoadService {
       }
 
       if (lines.length > 0) {
-        await TempRoadService.writeCSV(lines.join('\n'));
+        await TempRoadService.writeCSV(lines.join("\n"));
       } else {
         console.log("No active temporary roads found, skipping OSRM update");
       }
@@ -133,10 +135,20 @@ class TempRoadService {
 
     console.log("Wrote temporary roads CSV file");
 
-    const contract = spawn("osrm-contract", ["--segment-speed-file", filename, ROUTE_DATA_PATH]);
+    const contract = spawn("osrm-contract", [
+      "--segment-speed-file",
+      filename,
+      ROUTE_DATA_PATH,
+    ]);
 
-    contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout));
-    contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr));
+    contract.stdout.on(
+      "data",
+      makeOutputReader("osrm-contract", process.stdout)
+    );
+    contract.stderr.on(
+      "data",
+      makeOutputReader("osrm-contract", process.stderr)
+    );
 
     return new Promise((resolve, reject) => {
       contract.on("exit", (code, signal) => {
@@ -149,8 +161,14 @@ class TempRoadService {
 
         const datastore = spawn("osrm-datastore", [ROUTE_DATA_PATH]);
 
-        datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout));
-        datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr));
+        datastore.stdout.on(
+          "data",
+          makeOutputReader("osrm-datastore", process.stdout)
+        );
+        datastore.stderr.on(
+          "data",
+          makeOutputReader("osrm-datastore", process.stderr)
+        );
 
         datastore.on("exit", (code, signal) => {
           if (code != 0) {
@@ -167,11 +185,13 @@ class TempRoadService {
 
   async batchUpdateTempRoads(newRoads, deletedRoadIds) {
     try {
-      await Promise.all(newRoads.map(road => this.repository.create(road)));
+      await Promise.all(newRoads.map((road) => this.repository.create(road)));
       console.log(`${newRoads ? newRoads.length : 0} temporary roads created`);
 
-      await Promise.all(deletedRoadIds.map(id => this.repository.delete(id)));
-      console.log(`${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`);
+      await Promise.all(deletedRoadIds.map((id) => this.repository.delete(id)));
+      console.log(
+        `${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`
+      );
 
       await this.updateTempRoads();
     } catch (err) {
