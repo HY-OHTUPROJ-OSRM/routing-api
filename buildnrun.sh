@@ -1,0 +1,2 @@
+./buildmac.sh
+./startmac.sh
