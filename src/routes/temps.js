@@ -4,89 +4,77 @@ const TempRoadService = require("../services/TempRoadService");
 const tempsRouter = Router();
 const service = new TempRoadService();
 
+// Helper for error responses
+const handleError = (res, message, error, status = 500) => {
+  res.status(status).json({ message, error: error.message });
+};
+
 // List all temporary roads
 tempsRouter.get("/", async (req, res) => {
   try {
     const temps = await service.getAllTempRoads();
     res.json(temps);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching temps", error: error.message });
+    handleError(res, "Error fetching temps", error);
   }
 });
 
 // Create a new temporary road
 tempsRouter.post("/", async (req, res) => {
-  const data = req.body;
-
   try {
-    const newTemp = await service.createTempRoad(data);
+    const newTemp = await service.createTempRoad(req.body);
     res.status(201).json(newTemp);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error creating temp", error: error.message });
+    handleError(res, "Error creating temp", error);
   }
 });
 
 // Read a single temporary road
 tempsRouter.get("/:id", async (req, res) => {
-  const { id } = req.params;
   try {
-    const temp = await service.getTempRoadById(id);
+    const temp = await service.getTempRoadById(req.params.id);
     if (!temp) {
-      return res.status(404).json({ message: "Temp not found" });
+      return handleError(res, "Temp not found", new Error("Not found"), 404);
     }
     res.json(temp);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching temp", error: error.message });
+    handleError(res, "Error fetching temp", error);
   }
 });
 
 // Update metadata of a temporary road
 tempsRouter.patch("/:id", async (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
   try {
-    const updated = await service.updateTempRoad(id, updates);
+    const updated = await service.updateTempRoad(req.params.id, req.body);
     res.json(updated);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error updating temp", error: error.message });
+    handleError(res, "Error updating temp", error);
   }
 });
 
 // Delete a temporary road
 tempsRouter.delete("/:id", async (req, res) => {
-  const { id } = req.params;
   try {
-    await service.deleteTempRoad(id);
-    res.json({ message: `Temp with id ${id} deleted` });
+    await service.deleteTempRoad(req.params.id);
+    res.json({ message: `Temp with id ${req.params.id} deleted` });
   } catch (error) {
     if (error.message.includes("does not exist")) {
-      res.status(404).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Error deleting temp", error: error.message });
+      return handleError(res, error.message, error, 404);
     }
+    handleError(res, "Error deleting temp", error);
   }
 });
 
 // Toggle active state
 tempsRouter.post("/:id/toggle", async (req, res) => {
-  const { id } = req.params;
   try {
-    const toggled = await service.toggleTempRoadActive(id);
+    const toggled = await service.toggleTempRoadActive(req.params.id);
     res.json(toggled);
   } catch (error) {
     if (error.message.includes("does not exist")) {
-      res.status(404).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: "Error toggling temp", error: error.message });
+      return handleError(res, error.message, error, 404);
     }
+    handleError(res, "Error toggling temp", error);
   }
 });
 
