@@ -8,7 +8,7 @@ const DATABASE_USER = process.env.DATABASE_USER || "";
 const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || "";
 const SRID = process.env.SRID || "3857";
 const PROFILES_PATH = process.env.PROFILES_PATH || "/opt";
-const ROUTE_DATA_PATH = process.env.ROUTE_DATA_PATH || "./route-data.osm";
+const ROUTE_DATA_PATH = process.env.ROUTE_DATA_PATH || "./map_data/route-data.osm";
 
 module.exports = {
   PORT,
