@@ -1,145 +1,160 @@
-const databaseConnection = require("../utils/database")
+const databaseConnection = require("../utils/database");
 
 class ZoneRepository {
-    constructor() {
-        this.sql = databaseConnection
-        this.transactionOngoing = false
+  constructor() {
+    this.sql = databaseConnection;
+    this.transactionConnection = null;
+    this.transactionOngoing = false;
+  }
+
+  get activeSql() {
+    return this.transactionOngoing ? this.transactionConnection : this.sql;
+  }
+
+  async beginTransaction() {
+    if (this.transactionOngoing) {
+      throw new Error("Transaction already ongoing.");
     }
+    this.transactionConnection = await databaseConnection.reserve();
+    await this.transactionConnection`BEGIN;`;
+    this.transactionOngoing = true;
+  }
 
-    async beginTransaction() {
-        if (this.transactionOngoing) {
-            throw Error("Transaction already ongoing.")
-        }
-
-        this.sql = await databaseConnection.reserve()
-        await this.sql`BEGIN;`
-
-        this.transactionOngoing = true
+  async commitTransaction() {
+    if (!this.transactionOngoing) {
+      throw new Error("No transaction ongoing.");
     }
+    await this.transactionConnection`COMMIT;`;
+    await this.transactionConnection.release();
+    this.transactionConnection = null;
+    this.transactionOngoing = false;
+  }
 
-    async commitTransaction() {
-        if (!this.transactionOngoing) {
-            throw Error("No transaction ongoing.")
-        }
-
-        await this.sql`COMMIT;`
-        await this.sql.release()
-
-        this.sql = databaseConnection
-        this.transactionOngoing = false
+  async rollbackTransaction() {
+    if (!this.transactionOngoing) {
+      throw new Error("No transaction ongoing.");
     }
+    await this.transactionConnection`ROLLBACK;`;
+    await this.transactionConnection.release();
+    this.transactionConnection = null;
+    this.transactionOngoing = false;
+  }
 
-    async rollbackTransaction() {
-        if (!this.transactionOngoing) {
-            throw Error("No transaction ongoing.")
-        }
-
-        await this.sql`ROLLBACK;`
-        await this.sql.release()
-
-        this.sql = databaseConnection
-        this.transactionOngoing = false
-    }
-
-    async getZones() {
-        const zoneResult = await this.sql`
-            WITH gps_zones AS (
-                SELECT id, type, effect_value, name, ST_Transform(geom, 4326)
-                FROM zones
-            )
-            SELECT json_build_object(
-                'type', 'FeatureCollection',
-                'features', COALESCE(json_agg(ST_AsGeoJSON(gps_zones.*)::json), '[]'::json)
-            )
-            FROM gps_zones;
-        `
-        return zoneResult[0].json_build_object
-    }
-
-    async createZone(zone) {
-        let effectValue = zone.properties.effectValue
-
-        if (effectValue === undefined) {
-            effectValue = null
-        }
-
-        const result = await this.sql`
-            INSERT INTO zones (type, name, effect_value, geom)
-            VALUES (
-                ${zone.properties.type},
-                ${zone.properties.name},
-                ${effectValue},
-                ST_Transform(St_GeomFromGeoJSON(${JSON.stringify(zone.geometry)}), 3857)
-            )
-            RETURNING id;
-        `
-        return result[0].id
-    }
-
-    async deleteZones(ids) {
-        if (!ids) return
-
-        await this.sql`
-            DELETE FROM zones WHERE id IN ${ this.sql(ids) }
-        `
-    }
-
-    async getPathsOverlappingZones() {
-        const result = await this.sql`
-            WITH unnested_nodes AS (
-                SELECT
-                    ways.id AS way_id,
-                    ways.tags[8] as speed,
-                    unnest(array(SELECT nodes[i] FROM generate_series(array_lower(nodes, 1), array_upper(nodes, 1)) i)) AS node_id,
-                    generate_series(array_lower(ways.nodes, 1), array_upper(ways.nodes, 1)) AS node_pos
-                FROM
-                    (
-                        SELECT
-                            osm_id
-                        FROM planet_osm_line AS lines, zones
-                        WHERE ST_Intersects(lines.way, zones.geom)
-                    ) AS intersections
-                INNER JOIN
-                    planet_osm_ways AS ways ON intersections.osm_id = ways.id
-            ),
-            located_nodes AS (
-                SELECT DISTINCT
-                    way_id,
-                    speed,
-                    node_pos,
-                    node_id,
-                    n.lat,
-                    n.lon
-                FROM
-                    unnested_nodes
-                INNER JOIN
-                    planet_osm_nodes AS n ON node_id = n.id
-            )
-            SELECT
-                way_id,
-                ANY_VALUE(speed) AS speed,
-                ARRAY_AGG(ARRAY[node_id, lat, lon] ORDER BY node_pos) AS nodes
-            FROM
-                located_nodes
-            GROUP BY
-                way_id;
-        `
-
-        return result.map(
-            row => ({
-                speed: row.speed,
-                nodes: (() => {
-                    const path = new Map()
-
-                    row.nodes.forEach(([nodeId, lat, lon]) => {
-                        path.set(nodeId, { lat, lon })
-                    })
-
-                    return path
-                })()
-            })
+  async getAll() {
+    try {
+      const zoneResult = await this.activeSql`
+        WITH gps_zones AS (
+          SELECT
+            id, type, effect_value, name, ST_Transform(geom, 4326)
+          FROM
+            zones
         )
+        SELECT
+          json_build_object(
+            'type', 'FeatureCollection',
+            'features', COALESCE(json_agg(ST_AsGeoJSON(gps_zones.*)::json), '[]'::json)
+          ) AS geojson
+        FROM
+          gps_zones;
+      `;
+      return zoneResult[0].geojson;
+    } catch (err) {
+      throw new Error(`Failed to fetch zones: ${err.message}`);
     }
+  }
+
+  async create(zone) {
+    try {
+      const { type, name, effectValue } = zone.properties;
+      const geometry = JSON.stringify(zone.geometry);
+      const result = await this.activeSql`
+        INSERT INTO zones (
+          type, name, effect_value, geom
+        )
+        VALUES (
+          ${type},
+          ${name},
+          ${effectValue ?? null},
+          ST_Transform(St_GeomFromGeoJSON(${geometry}), 3857)
+        )
+        RETURNING
+          id;
+      `;
+      return result[0].id;
+    } catch (err) {
+      throw new Error(`Failed to create zone: ${err.message}`);
+    }
+  }
+
+  async delete(ids) {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return;
+    try {
+      await this.activeSql`
+        DELETE FROM
+          zones
+        WHERE
+          id IN (${ids});
+      `;
+    } catch (err) {
+      throw new Error(`Failed to delete zones: ${err.message}`);
+    }
+  }
+
+  async getPathsOverlappingZones() {
+    try {
+      const result = await this.activeSql`
+        WITH unnested_nodes AS (
+          SELECT
+            ways.id AS way_id,
+            ways.tags[8] AS speed,
+            unnest(array(SELECT nodes[i] FROM generate_series(array_lower(nodes, 1), array_upper(nodes, 1)) i)) AS node_id,
+            generate_series(array_lower(ways.nodes, 1), array_upper(ways.nodes, 1)) AS node_pos
+          FROM
+            (
+              SELECT
+                osm_id
+              FROM
+                planet_osm_line AS lines, zones
+              WHERE
+                ST_Intersects(lines.way, zones.geom)
+            ) AS intersections
+          INNER JOIN
+            planet_osm_ways AS ways ON intersections.osm_id = ways.id
+        ),
+        located_nodes AS (
+          SELECT DISTINCT
+            way_id,
+            speed,
+            node_pos,
+            node_id,
+            n.lat,
+            n.lon
+          FROM
+            unnested_nodes
+          INNER JOIN
+            planet_osm_nodes AS n ON node_id = n.id
+        )
+        SELECT
+          way_id,
+          ANY_VALUE(speed) AS speed,
+          ARRAY_AGG(ARRAY[node_id, lat, lon] ORDER BY node_pos) AS nodes
+        FROM
+          located_nodes
+        GROUP BY
+          way_id;
+      `;
+      return result.map((row) => ({
+        speed: row.speed,
+        nodes: new Map(
+          row.nodes.map(([nodeId, lat, lon]) => [nodeId, { lat, lon }])
+        ),
+      }));
+    } catch (err) {
+      throw new Error(
+        `Failed to fetch paths overlapping zones: ${err.message}`
+      );
+    }
+  }
 }
 
-module.exports = ZoneRepository
+module.exports = ZoneRepository;

@@ -1,3 +1,5 @@
 route-data.osrm.*
 node_modules/
 .env
+.DS_Store
+.vscode/
