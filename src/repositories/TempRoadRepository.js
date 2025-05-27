@@ -56,7 +56,7 @@ class TempRoadRepository {
           length, speed, description
         )
         VALUES (
-          ${type}, ${name}, ${status}, ${this.sql(tags)},
+          ${type}, ${name}, ${status}, ${JSON.stringify(tags)},
           ${start_node}, ${end_node}, ${length}, ${speed}, ${description}
         )
         RETURNING
