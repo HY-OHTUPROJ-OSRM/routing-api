@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { PORT, PROFILES_PATH, ROUTE_DATA_PATH } = require("./utils/config");
+const { PORT, PROFILES_PATH, ROUTE_DATA_PATH, OSRM_BACKEND_PORT } = require("./utils/config");
 const server = require("./server");
 const { spawn } = require("child_process");
 const ZoneService = require("./services/ZoneService");
@@ -37,7 +37,7 @@ async function startServer() {
 
 // Start OSRM backend process
 function startOsrmBackend() {
-  const osrm = spawn("osrm-routed", ["--shared-memory", "--algorithm", "ch"]);
+  const osrm = spawn("osrm-routed", ["--shared-memory", "--algorithm", "ch", "--port", OSRM_BACKEND_PORT]);
   let started = false;
 
   process.on("uncaughtException", (err) => {
