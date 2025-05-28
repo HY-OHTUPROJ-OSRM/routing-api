@@ -7,6 +7,7 @@ const zoneRouter = require("./routes/zones");
 const segmentRouter = require("./routes/segments");
 const statusRouter = require("./routes/status");
 const tempRouter = require("./routes/temps");
+const nodesRouter = require("./routes/nodes");
 
 const server = express();
 
@@ -28,5 +29,6 @@ server.use("/zones", zoneRouter);
 server.use("/segments", segmentRouter);
 server.use("/status", statusRouter);
 server.use("/temps", tempRouter);
+server.use("/nodes", nodesRouter);
 
 module.exports = server;
