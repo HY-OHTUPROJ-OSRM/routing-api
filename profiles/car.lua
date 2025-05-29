@@ -15,8 +15,15 @@ find_access_tag = require("lib/access").find_access_tag
 limit = require("lib/maxspeed").limit
 Utils = require("lib/utils")
 Measure = require("lib/measure")
+local vehicle_classes = require("profiles/vehicle_class_config")
 
 function setup()
+  -- Dynamically build classes and excludable from config
+  local class_names = {}
+  for _, c in ipairs(vehicle_classes.weight_classes) do table.insert(class_names, c.name) end
+  for _, c in ipairs(vehicle_classes.height_classes) do table.insert(class_names, c.name) end
+  local excludable = {}
+  for _, name in ipairs(class_names) do table.insert(excludable, Set{name}) end
   return {
     properties = {
       max_speed_for_map_matching      = 180/3.6, -- 180kmph -> m/s
@@ -119,19 +126,8 @@ function setup()
       'vehicle'
     },
 
-   classes = Sequence {
-     'under10k','under20k','under30k',
-     'under3m','under4m','under5m'
-   },
-
-    excludable = Sequence {
-      Set{'under10k'},
-      Set{'under20k'},
-      Set{'under30k'},
-      Set{'under3m'},
-      Set{'under4m'},
-      Set{'under5m'}
-    },
+   classes = Sequence(class_names),
+    excludable = Sequence(excludable),
 
     avoid = Set {
       'area',
@@ -377,19 +373,22 @@ end
 
 local function assign_limit_classes(profile, way, result, data)
   if result.classes then
-    local mw = Measure.get_max_weight( way:get_value_by_key("maxweight"), way )
+    local mw = Measure.get_max_weight(way:get_value_by_key("maxweight"), way)
     if mw then
-      if     mw <= 10000 then result.classes:insert('under10k')
-      elseif mw <= 20000 then result.classes:insert('under20k')
-      elseif mw <= 30000 then result.classes:insert('under30k')
+      for _, c in ipairs(vehicle_classes.weight_classes) do
+        if mw <= c.cutoff then
+          result.classes:insert(c.name)
+          break
+        end
       end
     end
-
-    local mh = Measure.get_max_height( way:get_value_by_key("maxheight"), way )
+    local mh = Measure.get_max_height(way:get_value_by_key("maxheight"), way)
     if mh then
-      if     mh <= 3.0 then result.classes:insert('under3m')
-      elseif mh <= 4.0 then result.classes:insert('under4m')
-      elseif mh <= 5.0 then result.classes:insert('under5m')
+      for _, c in ipairs(vehicle_classes.height_classes) do
+        if mh <= c.cutoff then
+          result.classes:insert(c.name)
+          break
+        end
       end
     end
   end
