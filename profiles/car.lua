@@ -380,7 +380,7 @@ local function assign_limit_classes(profile, way, result, data)
     local mh = Measure.get_max_height(way:get_value_by_key("maxheight"), way)
     if mw and mh then
       for _, c in ipairs(vehicle_classes.classes) do
-        if mw <= c.weight_cutoff and mh <= c.height_cutoff then
+        if mw < c.weight_cutoff and mh < c.height_cutoff then
           result.classes:insert(c.id)
           break
         end
