@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const proxy = require("express-http-proxy");
 const fs = require("fs");
 const path = require("path");
@@ -16,6 +17,7 @@ const { parseVehicleConfig } = require("./utils/vehicle_config");
 const server = express();
 
 // Middleware
+server.use(helmet());
 server.use(express.json());
 server.use(cors());
 
