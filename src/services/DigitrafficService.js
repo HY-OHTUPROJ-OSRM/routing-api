@@ -1,14 +1,15 @@
 const fetch = require("node-fetch");
 
-// const STATIONS_URL = "https://tie.digitraffic.fi/api/tms/v1/stations/data";
 const STATIONS_URL = "https://tie.digitraffic.fi/api/tms/v1/stations";
-
 
 const DATA_URL = (id) =>
   `https://tie.digitraffic.fi/api/tms/v1/stations/${id}/data`;
 
+const ROAD_WORKS_URL =
+  "https://tie.digitraffic.fi/api/traffic-message/v1/messages?inactiveHours=0&includeAreaGeometry=false&situationType=ROAD_WORK";
 
-class DigitrafficVolumeService {
+
+class DigitrafficService {
   static async fetchStations() {
     const res = await fetch(STATIONS_URL, {
       headers: {
@@ -56,6 +57,20 @@ class DigitrafficVolumeService {
 
     return await res.json();
   }
+
+  static async fetchRoadWorks() {
+    const res = await fetch(ROAD_WORKS_URL, {
+      headers: { "Accept-Encoding": "gzip" },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to fetch road works: ${res.status}\n${text}`);
+    }
+
+    return await res.json();
+  }
+
 }
 
-module.exports = DigitrafficVolumeService;
+module.exports = DigitrafficService;
