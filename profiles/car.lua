@@ -20,10 +20,13 @@ local vehicle_classes = require("profiles/vehicle_class_config")
 function setup()
   -- Dynamically build classes and excludable from config
   local class_names = {}
-  for _, c in ipairs(vehicle_classes.weight_classes) do table.insert(class_names, c.name) end
-  for _, c in ipairs(vehicle_classes.height_classes) do table.insert(class_names, c.name) end
   local excludable = {}
-  for _, name in ipairs(class_names) do table.insert(excludable, Set{name}) end
+
+  for _, c in ipairs(vehicle_classes.classes) do
+    table.insert(class_names, c.id)
+    table.insert(excludable, Set{c.id})
+  end
+
   return {
     properties = {
       max_speed_for_map_matching      = 180/3.6, -- 180kmph -> m/s
@@ -374,19 +377,11 @@ end
 local function assign_limit_classes(profile, way, result, data)
   if result.classes then
     local mw = Measure.get_max_weight(way:get_value_by_key("maxweight"), way)
-    if mw then
-      for _, c in ipairs(vehicle_classes.weight_classes) do
-        if mw <= c.cutoff then
-          result.classes:insert(c.name)
-          break
-        end
-      end
-    end
     local mh = Measure.get_max_height(way:get_value_by_key("maxheight"), way)
-    if mh then
-      for _, c in ipairs(vehicle_classes.height_classes) do
-        if mh <= c.cutoff then
-          result.classes:insert(c.name)
+    if mw and mh then
+      for _, c in ipairs(vehicle_classes.classes) do
+        if mw <= c.weight_cutoff and mh <= c.height_cutoff then
+          result.classes:insert(c.id)
           break
         end
       end
