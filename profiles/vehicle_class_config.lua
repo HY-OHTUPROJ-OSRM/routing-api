@@ -1,4 +1,4 @@
--- This file defines vehicle class cutoffs for weight and height.
+-- This file defines vehicle class cutoffs for weight (kg) and height (m).
 return {
     classes = {
         {

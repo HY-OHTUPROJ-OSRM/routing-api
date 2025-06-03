@@ -129,7 +129,7 @@ function setup()
       'vehicle'
     },
 
-   classes = Sequence(class_names),
+    classes = Sequence(class_names),
     excludable = Sequence(excludable),
 
     avoid = Set {
@@ -375,15 +375,14 @@ function process_node(profile, node, result, relations)
 end
 
 local function assign_limit_classes(profile, way, result, data)
-  if result.classes then
-    local mw = Measure.get_max_weight(way:get_value_by_key("maxweight"), way)
-    local mh = Measure.get_max_height(way:get_value_by_key("maxheight"), way)
-    if mw and mh then
-      for _, c in ipairs(vehicle_classes.classes) do
-        if mw < c.weight_cutoff and mh < c.height_cutoff then
-          result.classes:insert(c.id)
-          break
-        end
+  local mw = Measure.get_max_weight(way:get_value_by_key("maxweight"), way)
+  local mh = Measure.get_max_height(way:get_value_by_key("maxheight"), way)
+  
+  if mw or mh then
+    for _, c in ipairs(vehicle_classes.classes) do
+      if (mw and mw < c.weight_cutoff) or (mh and mh < c.height_cutoff) then
+        result.forward_classes[c.id]  = true
+        result.backward_classes[c.id] = true
       end
     end
   end
@@ -432,7 +431,6 @@ function process_way(profile, way, result, relations)
     WayHandlers.handle_width,
     WayHandlers.handle_length,
     WayHandlers.handle_weight,
-    assign_limit_classes,
 
     -- determine access status by checking our hierarchy of
     -- access tags, e.g: motorcar, motor_vehicle, vehicle
@@ -479,7 +477,8 @@ function process_way(profile, way, result, relations)
     WayHandlers.weights,
 
     -- set classification of ways relevant for turns
-    WayHandlers.way_classification_for_turn
+    WayHandlers.way_classification_for_turn,
+    assign_limit_classes
   }
 
   WayHandlers.run(profile, way, result, data, handlers, relations)
