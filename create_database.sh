@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS zones (
         type TEXT,
         name TEXT,
         effect_value DOUBLE PRECISION,
+        source TEXT,
         geom GEOMETRY(POLYGON, 3857) CHECK (ST_IsValid(geom))
 );
 CREATE TABLE IF NOT EXISTS temporary_routes(
