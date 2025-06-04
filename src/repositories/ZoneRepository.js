@@ -45,7 +45,7 @@ class ZoneRepository {
       const zoneResult = await this.activeSql`
         WITH gps_zones AS (
           SELECT
-            id, type, effect_value, name, ST_Transform(geom, 4326)
+            id, type, effect_value, name, source, ST_Transform(geom, 4326)
           FROM
             zones
         )
@@ -65,16 +65,17 @@ class ZoneRepository {
 
   async create(zone) {
     try {
-      const { type, name, effectValue } = zone.properties;
+      const { type, name, effectValue, source } = zone.properties;
       const geometry = JSON.stringify(zone.geometry);
       const result = await this.activeSql`
         INSERT INTO zones (
-          type, name, effect_value, geom
+          type, name, effect_value, source, geom
         )
         VALUES (
           ${type},
           ${name},
           ${effectValue ?? null},
+          ${source ?? null},
           ST_Transform(St_GeomFromGeoJSON(${geometry}), 3857)
         )
         RETURNING
@@ -87,13 +88,16 @@ class ZoneRepository {
   }
 
   async delete(ids) {
-    if (!ids || !Array.isArray(ids) || ids.length === 0) return;
+    if (!Array.isArray(ids)) return;
+    // Convert all to numbers, filter out non-integers, null, undefined, NaN
+    const filteredIds = ids
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    if (filteredIds.length === 0) return;
     try {
       await this.activeSql`
-        DELETE FROM
-          zones
-        WHERE
-          id IN (${ids});
+        DELETE FROM zones
+        WHERE id = ANY(${filteredIds});
       `;
     } catch (err) {
       throw new Error(`Failed to delete zones: ${err.message}`);
