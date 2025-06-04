@@ -15,7 +15,7 @@ const disconnectedLinksRouter = require("./routes/disconnected_links");
 const nodelistRouter = require("./routes/nodelist");
 const nodesRouter = require("./routes/nodes");
 const { parseVehicleConfig } = require("./utils/vehicle_config");
-const volumeRouter = require("./routes/volume")
+const trafficRouter = require("./routes/traffic")
 
 
 const server = express();
@@ -56,7 +56,7 @@ server.use("/tile", proxy(`${BACKEND_URL}/tile`, {
 server.use("/nodes", nodesRouter);
 server.use("/disconnected_links", disconnectedLinksRouter);
 server.use("/nodelist", nodelistRouter);
-server.use("/volume", volumeRouter);
+server.use("/traffic", trafficRouter);
 
 
 server.get("/vehicle-config", (req, res) => {
