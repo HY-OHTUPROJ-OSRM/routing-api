@@ -1,5 +1,3 @@
-const fetch = require("node-fetch");
-
 const STATIONS_URL = "https://tie.digitraffic.fi/api/tms/v1/stations";
 
 const DATA_URL = (id) =>
