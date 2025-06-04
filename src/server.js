@@ -11,6 +11,7 @@ const segmentRouter = require("./routes/segments");
 const statusRouter = require("./routes/status");
 const tempRouter = require("./routes/temps");
 const disconnectedLinksRouter = require("./routes/disconnected_links");
+const nodelistRouter = require("./routes/nodelist");
 const nodesRouter = require("./routes/nodes");
 const { parseVehicleConfig } = require("./utils/vehicle_config");
 
@@ -31,6 +32,7 @@ server.use("/zones", zoneRouter)
 server.use("/segments", segmentRouter)
 server.use("/status", statusRouter)
 server.use("/disconnected_links", disconnectedLinksRouter);
+server.use("/nodelist", nodelistRouter);
 
 // Proxy routes
 const proxyRoute = (path) =>
