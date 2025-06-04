@@ -5,11 +5,13 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "jest"
+    "test": "jest",
+    "importRoadworks": "node scripts/importRoadworks.js"
   },
   "author": "HY-OHTUPROJ-OSRM",
   "license": "MIT",
   "dependencies": {
+    "@turf/turf": "^7.2.0",
     "axios": "^1.7.0",
     "cors": "^2.8.5",
     "cross-env": "^7.0.3",
