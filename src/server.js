@@ -16,31 +16,21 @@ const server = express();
 server.use(express.json());
 server.use(cors());
 
-server.use("/route", proxy(`${BACKEND_URL}/route`, {
-    proxyReqPathResolver: (req) => `/route${req.url}`
-}))
-server.use("/tile", proxy(`${BACKEND_URL}/tile`, {
-    proxyReqPathResolver: (req) => `/tile${req.url}`
-}))
-server.use("/zones", zoneRouter)
-server.use("/segments", segmentRouter)
-server.use("/status", statusRouter)
-server.use("/disconnected_links", disconnectedLinksRouter);
-
-// Proxy routes
-const proxyRoute = (path) =>
-  proxy(`${BACKEND_URL}${path}`, {
-    proxyReqPathResolver: (req) => `${path}${req.url}`,
-  });
-
-server.use("/route", proxyRoute("/route"));
-server.use("/tile", proxyRoute("/tile"));
-
 // API routes
 server.use("/zones", zoneRouter);
 server.use("/segments", segmentRouter);
 server.use("/status", statusRouter);
 server.use("/temps", tempRouter);
-server.use("/nodes", nodesRouter);
+server.use("/disconnected_links", disconnectedLinksRouter);
+server.use("/nodes", nodesRouter); 
+
+// Proxy routes
+server.use("/route", proxy(`${BACKEND_URL}/route`, {
+    proxyReqPathResolver: (req) => `/route${req.url}`
+}));
+
+server.use("/tile", proxy(`${BACKEND_URL}/tile`, {
+    proxyReqPathResolver: (req) => `/tile${req.url}`
+}));
 
 module.exports = server;
