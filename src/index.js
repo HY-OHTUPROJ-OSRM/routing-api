@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { PORT, PROFILES_PATH, ROUTE_DATA_PATH, OSRM_BACKEND_PORT } = require("./utils/config");
+const { PORT, ROUTE_DATA_PATH, OSRM_BACKEND_PORT } = require("./utils/config");
 const server = require("./server");
 const { spawn } = require("child_process");
 const ZoneService = require("./services/ZoneService");
@@ -16,7 +16,7 @@ function prepareOsrmData() {
   execSyncCustom("create_database.sh", "./create_database.sh");
   execSyncCustom(
     "osrm-extract",
-    `osrm-extract -p ${PROFILES_PATH}/car.lua ${ROUTE_DATA_PATH}`
+    `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
   );
   execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
   execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
