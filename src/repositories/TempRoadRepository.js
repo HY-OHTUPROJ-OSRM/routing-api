@@ -7,13 +7,14 @@ class TempRoadRepository {
 
   async getAll() {
     try {
-      return await this.sql`
+      const result = await this.sql`
         SELECT
           id, type, name, status, tags, start_node, end_node,
           length, speed, description, created_at, updated_at
         FROM
           temporary_routes;
       `;
+      return result.map(item => ({...item, tags: JSON.parse(item.tags)}));
     } catch (err) {
       throw new Error(`Failed to fetch all temporary routes: ${err.message}`);
     }
@@ -30,7 +31,12 @@ class TempRoadRepository {
         WHERE
           id = ${id};
       `;
-      return result[0] || null;
+      if (result) {
+        item = result[0];
+        item.tags = JSON.parse(item.tags);
+        return item;
+      }
+      return null;
     } catch (err) {
       throw new Error(`Failed to fetch temporary route by id: ${err.message}`);
     }
