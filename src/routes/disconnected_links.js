@@ -116,14 +116,9 @@ disconnectedLinksRouter.post("/", async (req, res) => {
   const { minDist, maxDist, namesAreSame } = req.body;
 
   try {
-    //console.log("min_dist", minDist);
-    //console.log("max_dist", maxDist);
-    //onsole.log("names_are_same", namesAreSame);
     await getDisconnectedRoads(minDist, maxDist, namesAreSame, data => {
       res.json({ data: data });
     });
-    //console.log("data", data);
-
   } catch (error) {
     console.error("Error fetching disconnected links:", error);
     res.status(500).json({
@@ -133,28 +128,4 @@ disconnectedLinksRouter.post("/", async (req, res) => {
   }
 });
 
-async function test() {
-  getDisconnectedRoads(0, 6, true, data => console.log(data));
-}
-
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const toRadians = deg => deg * (Math.PI / 180);
-  const R = 6371e3; // Earth radius in meters
-
-  const φ1 = toRadians(lat1);
-  const φ2 = toRadians(lat2);
-  const Δφ = toRadians(lat2 - lat1);
-  const Δλ = toRadians(lon2 - lon1);
-
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) *
-    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  const distance = R * c; // in meters
-  return distance;
-}
-
-
-module.exports = { test, disconnectedLinksRouter };
+module.exports = { disconnectedLinksRouter };
