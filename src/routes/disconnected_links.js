@@ -16,145 +16,100 @@ async function getWayList() {
   return ways;
 }
 
-async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame) {
-  const nodes0 = await getNodeList();
-  const nodes = {};
-  for (let node of nodes0) {
-    nodes[node.id] = node;
+function getTagValue(tags, key, fallback) {
+  for (let i = 0; i < tags.length; i += 2) {
+    if (tags[i] === key) {
+      return tags[i + 1] || fallback;
+    }
   }
+  return fallback;
+}
+
+async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, callback) {
+  const nodes0 = await getNodeList();
   const ways = await getWayList();
 
-  //console.log(nodes);
-  //console.log(ways);
+  const path = require('path');
+  const { spawn } = require('child_process');
+  const exePath = path.resolve(__dirname, '../../drl/drl');
+  const child = spawn(exePath);
 
-  const nodeCount = {};
+  let buffer = "";
+  child.stdout.on('data', (data) => {
+    //console.log(`C++ output: ${data}`);
+    buffer += data.toString();
+  });
 
+  child.stderr.on('data', (data) => {
+    console.error(`C++ error: ${data}`);
+  });
+
+  child.on('error', (err) => {
+    console.error(`Failed to start C++ process: ${err}`);
+  });
+
+  child.on('exit', (code) => {
+    if (code !== 0) {
+      console.error(`C++ process exited with code ${code}`);
+      return;
+    }
+
+    let res = [];
+
+    const lines = buffer.split('\n');
+    for (let line of lines) {
+      if (!line.trim()) continue; // skip empty lines
+      if (line.startsWith("::")) break;
+
+      let data = line.split(',');
+      if (data.length < 7) continue; // skip malformed lines
+
+      const startNodeId = parseInt(data[0]);
+      const startNodeLat = parseInt(data[1]);
+      const startNodeLon = parseInt(data[2]);
+      const endNodeId = parseInt(data[3]);
+      const endNodeLat = parseInt(data[4]);
+      const endNodeLon = parseInt(data[5]);
+      const distance = parseFloat(data[6]);
+
+      //console.log(`Disconnection: ${startNodeId} (${startNodeLat}, ${startNodeLon}) to ${endNodeId} (${endNodeLat}, ${endNodeLon}) with distance ${distance}`);
+
+      const disconnection = {
+        startNode: { id: startNodeId, lat: startNodeLat / 1e7, lon: startNodeLon / 1e7 },
+        endNode: { id: endNodeId, lat: endNodeLat / 1e7, lon: endNodeLon / 1e7 },
+        distance,
+      };
+      res.push(disconnection);
+    }
+
+    callback(res);
+  });
+
+  const binaryWriter = require("../utils/binary_writer");
+  const { writeUInt8, writeUInt32, writeDouble, writeString } = binaryWriter(child.stdin);
+
+  writeDouble(minDistance);
+  writeDouble(maxDistance);
+  writeUInt8(namesAreSame ? 1 : 0);
+
+  writeUInt32(nodes0.length);
+  for (let node of nodes0) {
+    writeUInt32(node.id);
+    writeUInt32(node.lat);
+    writeUInt32(node.lon);
+  }
+
+  writeUInt32(ways.length);
   for (let way of ways) {
-    const nameIndex = way.tags.indexOf('name');
-    const nameValue = nameIndex !== -1 ? way.tags[nameIndex + 1] : "(unnamed)";
-    way.name = nameValue;
-    //if (way.nodes.length < 2) console.log("only 1");
-    let startNodeId = way.nodes[0];
-    let startPointNode = nodes[startNodeId];
-    //startPoint = { lat: startPoint.lat, lon: startPoint.lon };
-    let startPoint = startPointNode.lat + "," + startPointNode.lon;
-    let endNodeId = way.nodes[way.nodes.length - 1];
-    let endPointNode = nodes[endNodeId];
-    //endPoint = { lat: endPoint.lat, lon: endPoint.lon };
-    let endPoint = endPointNode.lat + "," + endPointNode.lon;
-    //console.log(startPoint + " " + endPoint);
-
-    let startNodeData = nodeCount[startPoint];
-    if (!startNodeData) {
-      startNodeData = { node: startPointNode, count: 0, way: way };
-      nodeCount[startPoint] = startNodeData;
+    writeUInt32(way.id);
+    writeUInt32(way.nodes.length);
+    for (let id of way.nodes) {
+      writeUInt32(id);
     }
-    startNodeData.count += 1;
-
-    let endNodeData = nodeCount[endPoint];
-    if (!endNodeData) {
-      endNodeData = { node: endPointNode, count: 0, way: way };
-      nodeCount[endPoint] = endNodeData;
-    }
-    endNodeData.count += 1;
+    writeString(getTagValue(way.tags, "name", "(unnamed)"));
   }
 
-  let res = [];
-
-  let progress = 0;
-  let total = Object.keys(nodeCount).length;
-  for (let id in nodeCount) {
-    let data = nodeCount[id];
-    if (data.count > 1)
-      continue;
-    //console.log(data);
-
-    let way0 = data.way;
-    let lat0 = data.node.lat;
-    let lon0 = data.node.lon;
-
-    for (let way of ways) {
-      if (way0.id == way.id) continue;
-      if (namesAreSame && way0.name != way.name) continue;
-      for (let id of way.nodes) {
-        if (id == data.node.id) continue;
-        let node = nodes[id];
-        let lat1 = node.lat;
-        let lon1 = node.lon;
-
-        let distance = haversineDistance(lat0 / 1e7, lon0 / 1e7, lat1 / 1e7, lon1 / 1e7);
-        if (distance < minDistance || distance > maxDistance) continue;
-        console.log(distance + " " + lat0 + " " + lon0 + " " + lat1 + " " + lat1 + " " + data.node.id + " " + node.id);
-        let disconnection = {
-          startNode: { id: data.node.id, lat: lat0 / 1e7, lon: lon0 / 1e7 },
-          endNode: { id: node.id, lat: lat1 / 1e7, lon: lon1 / 1e7 },
-        };
-        res.push(disconnection);
-      }
-    }
-    ++progress;
-    console.log("progress " + progress + "/" + total);
-    if (progress == 400) break;
-  }
-
-  console.log(res);
-  console.log("done!");
-
-  return res;
-
-  /*const sameNameFilter = namesAreSame
-    ? databaseConnection`AND a.name = b.name`
-    : databaseConnection``;
-
-  return databaseConnection`
-    WITH endpoints AS (
-      SELECT osm_id,
-             COALESCE(NULLIF(name, ''), '(unnamed)') AS name,
-             ST_StartPoint(way) AS pt
-        FROM planet_osm_roads WHERE way IS NOT NULL
-      UNION ALL
-      SELECT osm_id,
-             COALESCE(NULLIF(name, ''), '(unnamed)'),
-             ST_EndPoint(way)
-        FROM planet_osm_roads WHERE way IS NOT NULL
-    ),
-    node_degree AS (
-      SELECT pt, COUNT(*) AS deg
-        FROM endpoints
-       GROUP BY pt
-    ),
-    dead_ends AS (
-      SELECT e.osm_id, e.name, e.pt
-        FROM endpoints e
-        JOIN node_degree d USING (pt)
-       WHERE d.deg <= 1          -- node's deg ≤ 1 
-    )
-    SELECT
-      a.osm_id                                  AS osm_id_a,
-      a.name                                    AS name_a,
-      b.osm_id                                  AS osm_id_b,
-      b.name                                    AS name_b,
-      ST_X(ST_Transform(a.pt, 4326))            AS a_lng,
-      ST_Y(ST_Transform(a.pt, 4326))            AS a_lat,
-      ST_X(ST_Transform(b.pt, 4326))            AS b_lng,
-      ST_Y(ST_Transform(b.pt, 4326))            AS b_lat,
-      ST_Distance(a.pt, b.pt)                   AS distance
-      --  (voit vaihtaa ST_Distance → ST_Length(ST_MakeLine(a.pt,b.pt)))
-    FROM dead_ends a
-    JOIN dead_ends b
-         ON a.osm_id <> b.osm_id
-        AND ST_DWithin(a.pt, b.pt, ${maxDistance})
-        AND ST_Distance(a.pt, b.pt) >= ${minDistance}
-        ${sameNameFilter}
-    WHERE NOT EXISTS (                          -- sus disconnected nodes
-            SELECT 1
-              FROM planet_osm_roads r
-             WHERE (ST_StartPoint(r.way)=a.pt OR ST_EndPoint(r.way)=a.pt)
-               AND (ST_StartPoint(r.way)=b.pt OR ST_EndPoint(r.way)=b.pt)
-          )
-    ORDER BY distance;
-  `;
-  */
+  child.stdin.end();
 }
 
 disconnectedLinksRouter.post("/", async (req, res) => {
@@ -164,9 +119,11 @@ disconnectedLinksRouter.post("/", async (req, res) => {
     //console.log("min_dist", minDist);
     //console.log("max_dist", maxDist);
     //onsole.log("names_are_same", namesAreSame);
-    const data = await getDisconnectedRoads(minDist, maxDist, namesAreSame);
+    await getDisconnectedRoads(minDist, maxDist, namesAreSame, data => {
+      res.json({ data: data });
+    });
     //console.log("data", data);
-    res.json({ data: data });
+
   } catch (error) {
     console.error("Error fetching disconnected links:", error);
     res.status(500).json({
@@ -176,8 +133,8 @@ disconnectedLinksRouter.post("/", async (req, res) => {
   }
 });
 
-function test() {
-  getDisconnectedRoads(0, 6, true);
+async function test() {
+  getDisconnectedRoads(0, 6, true, data => console.log(data));
 }
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -189,9 +146,9 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   const Δφ = toRadians(lat2 - lat1);
   const Δλ = toRadians(lon2 - lon1);
 
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 

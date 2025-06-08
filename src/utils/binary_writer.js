@@ -10,6 +10,11 @@ function binaryWriter(stream) {
       buffer.writeUInt16LE(n);
       stream.write(buffer);
     },
+    writeUInt32: (n) => {
+      const buffer = Buffer.alloc(4);
+      buffer.writeUInt32LE(n);
+      stream.write(buffer);
+    },
     writeUInt64: (n) => {
       const buffer = Buffer.alloc(8);
       buffer.writeBigUInt64LE(BigInt(n));
@@ -26,6 +31,12 @@ function binaryWriter(stream) {
       buffer.writeInt32LE(y, 4);
       stream.write(buffer);
     },
+    writeString: (str) => {
+      const lengthBuffer = Buffer.alloc(4);
+      lengthBuffer.writeUInt32LE(Buffer.byteLength(str, 'utf8'), 0);
+      stream.write(lengthBuffer);
+      stream.write(str, 'utf8');
+    }
   };
 }
 module.exports = binaryWriter;
