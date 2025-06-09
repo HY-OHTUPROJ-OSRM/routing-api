@@ -65,18 +65,18 @@ async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, call
       if (data.length < 7) continue; // skip malformed lines
 
       const startNodeId = parseInt(data[0]);
-      const startNodeLat = parseInt(data[1]);
-      const startNodeLon = parseInt(data[2]);
-      const endNodeId = parseInt(data[3]);
-      const endNodeLat = parseInt(data[4]);
-      const endNodeLon = parseInt(data[5]);
-      const distance = parseFloat(data[6]);
-
-      //console.log(`Disconnection: ${startNodeId} (${startNodeLat}, ${startNodeLon}) to ${endNodeId} (${endNodeLat}, ${endNodeLon}) with distance ${distance}`);
+      const startNodeName = data[1];
+      const startNodeLat = parseInt(data[2]);
+      const startNodeLon = parseInt(data[3]);
+      const endNodeId = parseInt(data[4]);
+      const endNodeName = data[5];
+      const endNodeLat = parseInt(data[6]);
+      const endNodeLon = parseInt(data[7]);
+      const distance = parseFloat(data[8]);
 
       const disconnection = {
-        startNode: { id: startNodeId, lat: startNodeLat / 1e7, lon: startNodeLon / 1e7 },
-        endNode: { id: endNodeId, lat: endNodeLat / 1e7, lon: endNodeLon / 1e7 },
+        startNode: { id: startNodeId, way_name: startNodeName, lat: startNodeLat / 1e7, lon: startNodeLon / 1e7 },
+        endNode: { id: endNodeId, way_name: endNodeName, lat: endNodeLat / 1e7, lon: endNodeLon / 1e7 },
         distance,
       };
       res.push(disconnection);
