@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <cstdint>
 #include <cstring>
+#include <set>
 
 auto read_int() -> uint32_t
 {
@@ -78,6 +79,7 @@ struct s_node
     double lon_f; // degrees
     int count = 0;
     void *last_way = nullptr;
+    bool deadend = false;
 };
 
 class c_way
@@ -158,13 +160,17 @@ auto main() -> int
 
     for (auto &way : ways)
     {
-        if (way.get_start_point().count == 1)
+        const auto start_node = &way.get_start_point();
+        const auto end_node = &way.get_end_point();
+        if (start_node->count == 1 && !start_node->deadend)
         {
-            deadends.push_back(&way.get_start_point());
+            start_node->deadend = true;
+            deadends.push_back(start_node);
         }
-        if (way.get_end_point().count == 1)
+        if (end_node->count == 1 && !end_node->deadend)
         {
-            deadends.push_back(&way.get_end_point());
+            end_node->deadend = true;
+            deadends.push_back(end_node);
         }
     }
 
@@ -189,8 +195,8 @@ auto main() -> int
 
     for (auto &node : deadends)
     {
-        if (node->count != 1)
-            continue;
+        // if (node->count != 1)
+        //     continue;
 
         const auto lat0 = node->lat_f;
         const auto lon0 = node->lon_f;
@@ -198,6 +204,33 @@ auto main() -> int
         const auto last_way = reinterpret_cast<c_way *>(node->last_way);
 
         const auto [x0, y0] = get_bin_key(lat0, lon0);
+
+        std::set<int> visited;
+        auto process_node = [&](s_node *node, s_node *start_node, c_way *way) -> void
+        {
+            if (start_node->id == node->id)
+                return;
+
+            if (visited.find(node->id) != visited.end())
+                return;
+
+            const auto dist = get_haversine_distance(lat0, lon0, start_node->lat_f, start_node->lon_f);
+
+            if (dist < min_dist || dist > max_dist)
+                return;
+
+            visited.insert(node->id);
+            std::cout << node->id
+                      << "," << last_way->m_name
+                      << "," << node->lat
+                      << "," << node->lon
+                      << "," << start_node->id
+                      << "," << way->m_name
+                      << "," << start_node->lat
+                      << "," << start_node->lon
+                      << "," << dist
+                      << std::endl;
+        };
 
         for (auto dx = -1; dx <= 1; ++dx)
         {
@@ -215,43 +248,8 @@ auto main() -> int
                     if (same_name && way->m_name != last_way->m_name)
                         continue;
 
-                    if (way->get_start_point().id != node->id)
-                    {
-                        const auto dist = get_haversine_distance(lat0,
-                                                                 lon0,
-                                                                 way->get_start_point().lat_f,
-                                                                 way->get_start_point().lon_f);
-                        if (dist < min_dist || dist > max_dist)
-                            continue;
-
-                        std::cout << node->id
-                                  << "," << node->lat
-                                  << "," << node->lon
-                                  << "," << way->get_start_point().id
-                                  << "," << way->get_start_point().lat
-                                  << "," << way->get_start_point().lon
-                                  << "," << dist
-                                  << std::endl;
-                    }
-
-                    if (way->get_end_point().id != node->id)
-                    {
-                        const auto dist = get_haversine_distance(lat0,
-                                                                 lon0,
-                                                                 way->get_end_point().lat_f,
-                                                                 way->get_end_point().lon_f);
-                        if (dist < min_dist || dist > max_dist)
-                            continue;
-
-                        std::cout << node->id
-                                  << "," << node->lat
-                                  << "," << node->lon
-                                  << "," << way->get_end_point().id
-                                  << "," << way->get_end_point().lat
-                                  << "," << way->get_end_point().lon
-                                  << "," << dist
-                                  << std::endl;
-                    }
+                    process_node(node, &way->get_start_point(), way);
+                    process_node(node, &way->get_end_point(), way);
                 }
             }
         }
