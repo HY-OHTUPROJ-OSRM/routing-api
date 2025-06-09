@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS temporary_routes(
         end_node INTEGER,
         length DOUBLE PRECISION,
         speed INTEGER,
+        max_weight DOUBLE PRECISION,
+        max_height DOUBLE PRECISION,
         description TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()

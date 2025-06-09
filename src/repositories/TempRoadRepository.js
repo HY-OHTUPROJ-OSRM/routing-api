@@ -7,13 +7,14 @@ class TempRoadRepository {
 
   async getAll() {
     try {
-      return await this.sql`
+      const result = await this.sql`
         SELECT
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at
+          length, speed, max_weight, max_height, description, created_at, updated_at
         FROM
           temporary_routes;
       `;
+      return result.map(item => ({...item, tags: JSON.parse(item.tags)}));
     } catch (err) {
       throw new Error(`Failed to fetch all temporary routes: ${err.message}`);
     }
@@ -24,13 +25,18 @@ class TempRoadRepository {
       const result = await this.sql`
         SELECT
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at
+          length, speed, max_weight, max_height, description, created_at, updated_at
         FROM
           temporary_routes
         WHERE
           id = ${id};
       `;
-      return result[0] || null;
+      if (result) {
+        item = result[0];
+        item.tags = JSON.parse(item.tags);
+        return item;
+      }
+      return null;
     } catch (err) {
       throw new Error(`Failed to fetch temporary route by id: ${err.message}`);
     }
@@ -46,6 +52,8 @@ class TempRoadRepository {
       end_node,
       length,
       speed,
+      max_weight = null,
+      max_height = null,
       description = null,
     } = data;
 
@@ -53,15 +61,15 @@ class TempRoadRepository {
       const result = await this.sql`
         INSERT INTO temporary_routes (
           type, name, status, tags, start_node, end_node,
-          length, speed, description
+          length, speed, max_weight, max_height, description
         )
         VALUES (
           ${type}, ${name}, ${status}, ${JSON.stringify(tags)},
-          ${start_node}, ${end_node}, ${length}, ${speed}, ${description}
+          ${start_node}, ${end_node}, ${length}, ${speed}, ${max_weight}, ${max_height}, ${description}
         )
         RETURNING
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at;
+          length, speed, max_weight, max_height, description, created_at, updated_at;
       `;
       return result[0];
     } catch (err) {
@@ -83,6 +91,8 @@ class TempRoadRepository {
       "end_node",
       "length",
       "speed",
+      "max_weight",
+      "max_height",
       "description",
     ];
     const setClauses = [];
@@ -110,7 +120,7 @@ class TempRoadRepository {
         id = $${idx}
       RETURNING
         id, type, name, status, tags, start_node, end_node,
-        length, speed, description, created_at, updated_at;
+        length, speed, max_weight, max_height, description, created_at, updated_at;
     `;
 
     try {
@@ -146,7 +156,7 @@ class TempRoadRepository {
           id = ${id}
         RETURNING
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at;
+          length, speed, max_weight, max_height, description, created_at, updated_at;
       `;
       return result[0];
     } catch (err) {
