@@ -70,7 +70,7 @@ async function roadworkToZone(roadwork) {
   lines.forEach((coords, idx) => {
     try {
       const line = turf.lineString(coords);
-      const buf = turf.buffer(line, 0.02, { units: "kilometers" }); // ~20m buffer
+      const buf = turf.buffer(line, 0.008, { units: "kilometers" }); // 8m buffer
       if (
         buf &&
         (buf.geometry.type === "Polygon" ||
@@ -116,7 +116,36 @@ async function getPreviousDigitrafficZoneIds() {
  */
 async function importRoadworks() {
   try {
-    const roadworks = await DigitrafficService.fetchRoadWorks();
+    let roadworks = await DigitrafficService.fetchRoadWorks();
+
+    // Helper to flatten coordinates
+    function extractAllCoords(coords, arr) {
+      if (!Array.isArray(coords)) return;
+      if (coords.length > 0 && typeof coords[0][0] === "number") {
+        coords.forEach((c) => arr.push(c));
+      } else {
+        coords.forEach((c) => extractAllCoords(c, arr));
+      }
+    }
+
+    // Filter roadworks to only those where all pairs of coordinates are within 3km
+    roadworks = roadworks.filter(rw => {
+      if (!rw.coordinates || !Array.isArray(rw.coordinates) || rw.coordinates.length === 0) return false;
+      const allCoords = [];
+      extractAllCoords(rw.coordinates, allCoords);
+      for (let i = 0; i < allCoords.length; i++) {
+        for (let j = i + 1; j < allCoords.length; j++) {
+          const dist = turf.distance(
+            turf.point(allCoords[i]),
+            turf.point(allCoords[j]),
+            { units: "kilometers" }
+          );
+          if (dist > 3) return false;
+        }
+      }
+      return true;
+    });
+
     const zones = [];
     for (const rw of roadworks) {
       if (
@@ -125,6 +154,7 @@ async function importRoadworks() {
         rw.coordinates.length === 0
       )
         continue;
+
       const features = await roadworkToZone(rw);
       if (features && features.length) zones.push(...features);
     }
