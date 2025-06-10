@@ -10,7 +10,7 @@ class TempRoadRepository {
       return await this.sql`
         SELECT
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at
+          length, speed, description, direction, created_at, updated_at
         FROM
           temporary_routes;
       `;
@@ -24,7 +24,7 @@ class TempRoadRepository {
       const result = await this.sql`
         SELECT
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at
+          length, speed, description, direction, created_at, updated_at
         FROM
           temporary_routes
         WHERE
@@ -47,21 +47,22 @@ class TempRoadRepository {
       length,
       speed,
       description = null,
+      direction = 2 // two-way(default)
     } = data;
 
     try {
       const result = await this.sql`
         INSERT INTO temporary_routes (
           type, name, status, tags, start_node, end_node,
-          length, speed, description
+          length, speed, description, direction
         )
         VALUES (
           ${type}, ${name}, ${status}, ${JSON.stringify(tags)},
-          ${start_node}, ${end_node}, ${length}, ${speed}, ${description}
+          ${start_node}, ${end_node}, ${length}, ${speed}, ${description}, ${direction}
         )
         RETURNING
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at;
+          length, speed, description, direction, created_at, updated_at;
       `;
       return result[0];
     } catch (err) {
@@ -84,7 +85,9 @@ class TempRoadRepository {
       "length",
       "speed",
       "description",
+      "direction"
     ];
+
     const setClauses = [];
     const values = [];
     let idx = 1;
@@ -110,7 +113,7 @@ class TempRoadRepository {
         id = $${idx}
       RETURNING
         id, type, name, status, tags, start_node, end_node,
-        length, speed, description, created_at, updated_at;
+        length, speed, description, direction, created_at, updated_at;
     `;
 
     try {
@@ -146,7 +149,7 @@ class TempRoadRepository {
           id = ${id}
         RETURNING
           id, type, name, status, tags, start_node, end_node,
-          length, speed, description, created_at, updated_at;
+          length, speed, description, direction, created_at, updated_at;
       `;
       return result[0];
     } catch (err) {

@@ -111,9 +111,23 @@ class TempRoadService {
         const endNodeId = road.end_node;
         const speed = road.speed;
 
-        // Add bidirectional connections
-        lines.push(`${startNodeId},${endNodeId},${speed}`);
-        lines.push(`${endNodeId},${startNodeId},${speed}`);
+        // __Add direction__
+        const direction = road.direction ?? 2; // default to 2 if undefined
+
+        if (direction === 2) {
+          // Two-way
+          lines.push(`${startNodeId},${endNodeId},${speed}`);
+          lines.push(`${endNodeId},${startNodeId},${speed}`);
+        } else if (direction === 3) {
+          // Against digitization
+          lines.push(`${endNodeId},${startNodeId},${speed}`);
+        } else if (direction === 4) {
+          // In digitization direction
+          lines.push(`${startNodeId},${endNodeId},${speed}`);
+        } else {
+          console.warn(`Unknown direction '${direction}' for road ID ${road.id}`);
+        }
+
       }
 
       if (lines.length > 0) {
