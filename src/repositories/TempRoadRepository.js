@@ -31,8 +31,8 @@ class TempRoadRepository {
         WHERE
           id = ${id};
       `;
-      if (result) {
-        item = result[0];
+      if (result && result.length > 0) {
+        const item = result[0];
         item.tags = JSON.parse(item.tags);
         return item;
       }
