@@ -88,6 +88,7 @@ public:
     uint32_t m_id;
     std::vector<s_node *> m_nodes;
     std::string m_name;
+    uint32_t m_city_code;
 
     s_node &get_start_point()
     {
@@ -156,6 +157,7 @@ auto main() -> int
             ways[i].m_nodes[j] = node;
         }
         ways[i].m_name = read_string();
+        ways[i].m_city_code = read_int();
     }
 
     for (auto &way : ways)
@@ -229,6 +231,7 @@ auto main() -> int
                       << "," << start_node->lat
                       << "," << start_node->lon
                       << "," << dist
+                      << "," << last_way->m_city_code
                       << std::endl;
         };
 

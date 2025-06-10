@@ -16,6 +16,23 @@ async function getWayList() {
   return ways;
 }
 
+async function getCounty() {
+  const rows = await databaseConnection`
+    SELECT code, name FROM municipalities
+  `;
+
+  const result = {};
+  for (const row of rows) {
+    const intCode = parseInt(row.code, 10);
+    if (!isNaN(intCode)) {
+      result[intCode] = row.name;
+    } else {
+      console.warn(`Invalid code encountered: ${row.code}`);
+    }
+  }
+  return result;
+}
+
 function getTagValue(tags, key, fallback) {
   for (let i = 0; i < tags.length; i += 2) {
     if (tags[i] === key) {
@@ -28,6 +45,7 @@ function getTagValue(tags, key, fallback) {
 async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, callback) {
   const nodes0 = await getNodeList();
   const ways = await getWayList();
+  const conties = await getCounty();
 
   const path = require('path');
   const { spawn } = require('child_process');
@@ -73,11 +91,14 @@ async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, call
       const endNodeLat = parseInt(data[6]);
       const endNodeLon = parseInt(data[7]);
       const distance = parseFloat(data[8]);
+      const city_code = parseInt(data[9]);
 
       const disconnection = {
         startNode: { id: startNodeId, way_name: startNodeName, lat: startNodeLat / 1e7, lon: startNodeLon / 1e7 },
         endNode: { id: endNodeId, way_name: endNodeName, lat: endNodeLat / 1e7, lon: endNodeLon / 1e7 },
-        distance,
+        distance: distance,
+        county: city_code,
+        county_name: conties[city_code]
       };
       res.push(disconnection);
     }
@@ -107,6 +128,7 @@ async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, call
       writeUInt32(id);
     }
     writeString(getTagValue(way.tags, "name", "(unnamed)"));
+    writeUInt32(getTagValue(way.tags, "city_code", 0));
   }
 
   child.stdin.end();
