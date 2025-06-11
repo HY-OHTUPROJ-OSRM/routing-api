@@ -138,9 +138,40 @@ disconnectedLinksRouter.post("/", async (req, res) => {
   const { minDist, maxDist, namesAreSame } = req.body;
 
   try {
-    await getDisconnectedRoads(minDist, maxDist, namesAreSame, data => {
-      res.json({ data: data });
-    });
+    const nodes = await databaseConnection`
+    SELECT *
+    FROM disconnected_links
+    WHERE distance >= ${minDist} AND distance <= ${maxDist}
+    ${
+      namesAreSame
+        ? databaseConnection`AND start_node_name = end_node_name`
+        : databaseConnection``
+    }
+  `;
+
+    const data = [];
+    for (let node of nodes) {
+      let disconnection = {
+        startNode: {
+          id: node.start_node,
+          way_name: node.start_node_name,
+          lat: node.start_node_lat,
+          lon: node.start_node_lon
+        },
+        endNode: {
+          id: node.end_node,
+          way_name: node.end_node_name,
+          lat: node.end_node_lat,
+          lon: node.end_node_lon
+        },
+        distance: node.distance,
+        county_name: node.county_name
+      };
+      data.push(disconnection);
+    }
+
+    res.json({ data: data });
+
   } catch (error) {
     console.error("Error fetching disconnected links:", error);
     res.status(500).json({
@@ -150,4 +181,46 @@ disconnectedLinksRouter.post("/", async (req, res) => {
   }
 });
 
-module.exports = { disconnectedLinksRouter };
+async function fetchDisconnectedLinks() {
+  const nodes = await databaseConnection`
+    SELECT * FROM disconnected_links
+  `;
+
+  if (nodes.length === 0) {
+    console.log("Fetching disconnected links...");
+
+    const timer = setInterval(() => {
+      console.log("Still fetching disconnected links...");
+    }, 1000);
+
+    await new Promise(resolve => {
+      getDisconnectedRoads(0.0, 60.0, false, async data => {
+        const insertPromises = data.map(link => {
+          return databaseConnection`
+            INSERT INTO disconnected_links (
+              start_node, start_node_name, start_node_lat, start_node_lon,
+              end_node, end_node_name, end_node_lat, end_node_lon,
+              distance, county_code, county_name
+            ) VALUES (
+              ${link.startNode.id}, ${link.startNode.way_name}, ${link.startNode.lat}, ${link.startNode.lon},
+              ${link.endNode.id}, ${link.endNode.way_name}, ${link.endNode.lat}, ${link.endNode.lon},
+              ${link.distance}, ${link.county}, ${link.county_name}
+            )
+          `;
+        });
+
+        await Promise.all(insertPromises);
+        clearInterval(timer);
+        console.log("Done fetching disconnected links.");
+        resolve();
+      });
+    });
+
+    return;
+  }
+
+  console.log("Disconnected links already fetched.");
+}
+
+
+module.exports = { disconnectedLinksRouter, fetchDisconnectedLinks };

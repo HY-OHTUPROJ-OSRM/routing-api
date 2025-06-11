@@ -10,6 +10,7 @@ const {
   execSyncCustom,
   makeOutputReader,
 } = require("./utils/process_utils");
+const { fetchDisconnectedLinks } = require("./routes/disconnected_links");
 
 // Prepare OSRM data
 function prepareOsrmData() {
@@ -20,6 +21,7 @@ function prepareOsrmData() {
   );
   execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
   execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
+  fetchDisconnectedLinks();
 }
 
 // Start Express server after services are initialized

@@ -1,3 +1,5 @@
+#!/bin/bash
+set -euo pipefail
 
 create_sql="
 CREATE TABLE IF NOT EXISTS zones (
@@ -34,18 +36,19 @@ CREATE TABLE IF NOT EXISTS municipalities (
 CREATE TABLE IF NOT EXISTS disconnected_links (
     id SERIAL PRIMARY KEY,
 
-    start_node       INTEGER      NOT NULL,
+    start_node    INTEGER      NOT NULL,
     start_node_name  TEXT,
     start_node_lat   DOUBLE PRECISION,
     start_node_lon   DOUBLE PRECISION,
 
-    end_node         INTEGER      NOT NULL,
+    end_node      INTEGER      NOT NULL,
     end_node_name    TEXT,
     end_node_lat     DOUBLE PRECISION,
     end_node_lon     DOUBLE PRECISION,
 
     distance         DOUBLE PRECISION,
     county_code      TEXT,
+    county_name      TEXT,
 
     temp_road_id     INTEGER,
     CONSTRAINT fk_temp_road
@@ -75,6 +78,3 @@ echo "$json" | jq -c '.[] | {code: .code, name: .classificationItemNames[0].name
     PGPASSWORD=$DATABASE_PASSWORD psql -h $DATABASE_HOST -p "$DATABASE_PORT" -U "$DATABASE_USER" -c "INSERT INTO municipalities (code, name) VALUES ('$code', '$name') ON CONFLICT (code) DO NOTHING;"
 done
 
-osrm-extract   -p "./profiles/car.lua" "$ROUTE_DATA_PATH"
-osrm-contract            "${ROUTE_DATA_PATH%.*}.osrm"
-osrm-datastore --disable-shared-memory "${ROUTE_DATA_PATH%.*}.osrm"
