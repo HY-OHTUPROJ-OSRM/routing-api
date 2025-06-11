@@ -152,6 +152,7 @@ disconnectedLinksRouter.post("/", async (req, res) => {
     const data = [];
     for (let node of nodes) {
       let disconnection = {
+        id: node.id,   // 🆔 
         startNode: {
           id: node.start_node,
           way_name: node.start_node_name,
@@ -222,5 +223,29 @@ async function fetchDisconnectedLinks() {
   console.log("Disconnected links already fetched.");
 }
 
+disconnectedLinksRouter.patch("/:id", async (req, res) => {
+  const discId     = Number(req.params.id);
+  const { temp_road_id } = req.body;
+
+  try {
+    const result = await databaseConnection`
+      UPDATE disconnected_links
+      SET    temp_road_id = ${temp_road_id},
+             updated_at   = NOW()
+      WHERE  id = ${discId}
+      RETURNING id, temp_road_id;
+    `;
+    console.log("RETURNING rows =", result);
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Disconnection not found" });
+    }
+
+    res.json({ success: true, row: result[0] });
+  } catch (err) {
+    console.error("Error updating temp_road_id:", err);
+    res.status(500).json({ message: "Failed to update", error: err.message });
+  }
+});
 
 module.exports = { disconnectedLinksRouter, fetchDisconnectedLinks };
