@@ -6,7 +6,9 @@ RUN apt-get update && \
         postgresql-client \
         osm2pgsql \
         build-essential \
-        git && \
+        git \
+        curl \
+        jq && \
     rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 --branch v2.0.1 https://github.com/HY-OHTUPROJ-OSRM/Polygonal-Intersections.git /Polygonal-Intersections && \
