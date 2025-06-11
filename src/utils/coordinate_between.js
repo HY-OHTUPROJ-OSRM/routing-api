@@ -1,16 +1,20 @@
 const turf = require("@turf/turf");
 
 /**
- * Checks if point C (cx, cy) is between points A (ax, ay) and B (bx, by) on a straight line segment.
- * Optionally limits the maximum perpendicular distance from the segment (vertical axis) in kilometers.
+ * Returns true if point C is between points A and B on a straight line segment (with optional leeway and perpendicular distance).
+ *
+ * - Uses vector projection to check if C projects onto AB within the segment, allowing for leeway before/after the segment.
+ * - Optionally restricts C to be within a maximum perpendicular distance from AB (in kilometers).
+ *
  * @param {{lat: number, lng: number}} a - Start coordinate
  * @param {{lat: number, lng: number}} b - End coordinate
  * @param {{lat: number, lng: number}} c - Test coordinate
- * @param {number} [maxVerticalDistanceKm] - Optional. Max allowed perpendicular distance in kilometers.
- * @returns {boolean} True if C is between A and B (inclusive) and within maxVerticalDistanceKm if specified.
+ * @param {number} [maxVerticalDistanceKm] - Optional. Max allowed perpendicular distance from AB in kilometers.
+ * @param {number} [leewayKm] - Optional. Max allowed leeway before/after segment in kilometers. Default 0.
+ * @returns {boolean} True if C is between A and B (inclusive), within maxVerticalDistanceKm if specified, and within leewayKm if specified.
  */
-function isCoordinateBetween(a, b, c, maxVerticalDistanceKm) {
-  // Convert to vectors
+function isCoordinateBetween(a, b, c, maxVerticalDistanceKm, leewayKm = 0) {
+  // Convert coordinates to vectors (lat, lng)
   const ax = a.lat,
     ay = a.lng;
   const bx = b.lat,
@@ -18,22 +22,23 @@ function isCoordinateBetween(a, b, c, maxVerticalDistanceKm) {
   const cx = c.lat,
     cy = c.lng;
 
-  // Vector AB and AC
+  // Vector math: AB and AC
   const abx = bx - ax,
     aby = by - ay;
   const acx = cx - ax,
     acy = cy - ay;
 
-  // Project AC onto AB, get the normalized t value
+  // Project AC onto AB, get normalized t value (0=start, 1=end)
   const abLenSq = abx * abx + aby * aby;
   const dot = abx * acx + aby * acy;
   const t = abLenSq === 0 ? 0 : dot / abLenSq;
 
-  // Check if projection falls within the segment and C is colinear with AB
-  const isOnSegment = t >= 0 && t <= 1;
-  // Check colinearity by cross product (should be close to 0)
-  const cross = abx * acy - aby * acx;
-  const epsilon = 1e-8;
+  // Calculate segment length in kilometers for leeway scaling
+  const segmentLength = turf.distance([a.lng, a.lat], [b.lng, b.lat], { units: "kilometers" });
+  const leewayFraction = segmentLength === 0 ? 0 : (leewayKm || 0) / segmentLength;
+
+  // Check if projection falls within the segment, with leeway before/after
+  const isOnSegment = t >= -leewayFraction && t <= 1 + leewayFraction;
   let isCloseEnough = true;
 
   if (typeof maxVerticalDistanceKm === "number") {
@@ -47,7 +52,8 @@ function isCoordinateBetween(a, b, c, maxVerticalDistanceKm) {
     isCloseEnough = dist <= maxVerticalDistanceKm;
   }
 
-  return isOnSegment && Math.abs(cross) < epsilon && isCloseEnough;
+  // Return true only if C is on segment (with leeway) and close enough (if specified)
+  return isOnSegment && isCloseEnough;
 }
 
 module.exports = { isCoordinateBetween };
