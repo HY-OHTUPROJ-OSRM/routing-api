@@ -1,11 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
 create_sql="
 CREATE TABLE IF NOT EXISTS zones (
 	id SERIAL PRIMARY KEY,
-        type TEXT,
-        name TEXT,
-        effect_value DOUBLE PRECISION,
-        source TEXT,
-        geom GEOMETRY(POLYGON, 3857) CHECK (ST_IsValid(geom))
+    type TEXT,
+    name TEXT,
+    effect_value DOUBLE PRECISION,
+    source TEXT,
+    geom GEOMETRY(POLYGON, 3857) CHECK (ST_IsValid(geom))
 );
 
 CREATE TABLE IF NOT EXISTS temporary_routes(
@@ -32,6 +35,35 @@ CREATE TABLE IF NOT EXISTS municipalities (
     name TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS disconnected_links (
+    id SERIAL PRIMARY KEY,
+
+    start_node    INTEGER      NOT NULL,
+    start_node_name  TEXT,
+    start_node_lat   DOUBLE PRECISION,
+    start_node_lon   DOUBLE PRECISION,
+
+    end_node      INTEGER      NOT NULL,
+    end_node_name    TEXT,
+    end_node_lat     DOUBLE PRECISION,
+    end_node_lon     DOUBLE PRECISION,
+
+    distance         DOUBLE PRECISION,
+    county_code      TEXT,
+    county_name      TEXT,
+
+    temp_road_id     INTEGER,
+    CONSTRAINT fk_temp_road
+      FOREIGN KEY (temp_road_id) REFERENCES temporary_routes(id)
+      ON DELETE SET NULL,
+
+    created_at       TIMESTAMP DEFAULT NOW(),
+    updated_at       TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_disc_links_start_node ON disconnected_links(start_node);
+CREATE INDEX IF NOT EXISTS idx_disc_links_end_node   ON disconnected_links(end_node);
+
 CREATE INDEX IF NOT EXISTS idx_temp_routes_start_node ON temporary_routes(start_node);
 CREATE INDEX IF NOT EXISTS idx_temp_routes_end_node ON temporary_routes(end_node);
 CREATE INDEX IF NOT EXISTS sidx_zones_geom ON zones USING GIST(geom);
@@ -47,3 +79,4 @@ echo "$json" | jq -c '.[] | {code: .code, name: .classificationItemNames[0].name
     name=$(echo "$item" | jq -r '.name' | sed "s/'/''/g")
     PGPASSWORD=$DATABASE_PASSWORD psql -h $DATABASE_HOST -p "$DATABASE_PORT" -U "$DATABASE_USER" -c "INSERT INTO municipalities (code, name) VALUES ('$code', '$name') ON CONFLICT (code) DO NOTHING;"
 done
+
