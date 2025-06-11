@@ -153,6 +153,7 @@ disconnectedLinksRouter.post("/", async (req, res) => {
     for (let node of nodes) {
       let disconnection = {
         id: node.id,   // 🆔 
+        temp_road_id: node.temp_road_id,
         startNode: {
           id: node.start_node,
           way_name: node.start_node_name,
