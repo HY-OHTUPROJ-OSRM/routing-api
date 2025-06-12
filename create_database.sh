@@ -1,6 +1,24 @@
 #!/bin/bash
 set -euo pipefail
 
+drop_all=false
+for arg in "$@"; do
+  if [ "$arg" = "--drop" ]; then
+    drop_all=true
+    break
+  fi
+done
+
+if [ "$drop_all" = true ]; then
+  echo "Dropping all existing tables..."
+  PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" <<EOSQL
+DROP TABLE IF EXISTS disconnected_links CASCADE;
+DROP TABLE IF EXISTS temporary_routes CASCADE;
+DROP TABLE IF EXISTS zones CASCADE;
+DROP TABLE IF EXISTS municipalities CASCADE;
+EOSQL
+fi
+
 create_sql="
 CREATE TABLE IF NOT EXISTS zones (
 	id SERIAL PRIMARY KEY,

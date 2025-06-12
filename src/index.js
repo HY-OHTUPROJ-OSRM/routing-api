@@ -14,7 +14,8 @@ const { fetchDisconnectedLinks } = require("./routes/disconnected_links");
 
 // Prepare OSRM data
 function prepareOsrmData() {
-  execSyncCustom("create_database.sh", "./create_database.sh");
+  const drop = false;
+  execSyncCustom("create_database.sh", "./create_database.sh" + (drop ? " --drop" : ""));
   execSyncCustom(
     "osrm-extract",
     `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
