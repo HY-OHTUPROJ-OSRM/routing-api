@@ -36,12 +36,12 @@ CREATE TABLE IF NOT EXISTS municipalities (
 CREATE TABLE IF NOT EXISTS disconnected_links (
     id SERIAL PRIMARY KEY,
 
-    start_node    INTEGER      NOT NULL,
+    start_node       INTEGER    NOT NULL,
     start_node_name  TEXT,
     start_node_lat   DOUBLE PRECISION,
     start_node_lon   DOUBLE PRECISION,
 
-    end_node      INTEGER      NOT NULL,
+    end_node         INTEGER    NOT NULL,
     end_node_name    TEXT,
     end_node_lat     DOUBLE PRECISION,
     end_node_lon     DOUBLE PRECISION,
@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS disconnected_links (
     CONSTRAINT fk_temp_road
       FOREIGN KEY (temp_road_id) REFERENCES temporary_routes(id)
       ON DELETE SET NULL,
+
+    hide_status      BOOLEAN    NOT NULL DEFAULT FALSE,
 
     created_at       TIMESTAMP DEFAULT NOW(),
     updated_at       TIMESTAMP DEFAULT NOW()
