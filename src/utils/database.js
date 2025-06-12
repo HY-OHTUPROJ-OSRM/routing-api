@@ -13,6 +13,7 @@ const sql = postgres({
   database: DATABASE_DB,
   user: DATABASE_USER,
   password: DATABASE_PASSWORD,
+  ssl: true,
 });
 
 module.exports = sql;
