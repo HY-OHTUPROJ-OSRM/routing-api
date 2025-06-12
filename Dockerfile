@@ -1,4 +1,4 @@
-FROM osrm-backend:v6.0.0-debian
+FROM quay.io/routing-projekti/osrm-backend:v6.0.0-debian
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
