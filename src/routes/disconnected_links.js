@@ -154,6 +154,8 @@ disconnectedLinksRouter.post("/", async (req, res) => {
       let disconnection = {
         id: node.id,   // 🆔 
         temp_road_id: node.temp_road_id,
+        hide_status:  node.hide_status,
+
         startNode: {
           id: node.start_node,
           way_name: node.start_node_name,
@@ -246,6 +248,23 @@ disconnectedLinksRouter.patch("/:id", async (req, res) => {
   } catch (err) {
     console.error("Error updating temp_road_id:", err);
     res.status(500).json({ message: "Failed to update", error: err.message });
+  }
+});
+
+disconnectedLinksRouter.patch("/:id/hide", async (req, res) => {
+  const discId = Number(req.params.id);
+  try {
+    const result = await databaseConnection`
+      UPDATE disconnected_links
+      SET hide_status = NOT hide_status,
+          updated_at  = NOW()
+      WHERE id = ${discId}
+      RETURNING id, hide_status;
+    `;
+    if (result.length === 0) return res.status(404).json({ message: "Not found" });
+    res.json({ success: true, row: result[0] });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to hide/show", error: err.message });
   }
 });
 
