@@ -2,8 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const proxy = require("express-http-proxy");
-const fs = require("fs");
-const path = require("path");
 
 
 const { BACKEND_URL } = require("./utils/config");
@@ -16,6 +14,7 @@ const nodelistRouter = require("./routes/nodelist");
 const nodesRouter = require("./routes/nodes");
 const { parseVehicleConfig } = require("./utils/vehicle_config");
 const trafficRouter = require("./routes/traffic")
+const routeRouter = require("./routes/route");
 
 
 const server = express();
@@ -26,16 +25,9 @@ server.use(express.json());
 server.use(cors());
 
 // Proxy routes
-const proxyRoute = (path) =>
-  proxy(`${BACKEND_URL}${path}`, {
-    proxyReqPathResolver: (req) => `${path}${req.url}`,
-  });
 server.use("/tile", proxy(`${BACKEND_URL}/tile`, {
     proxyReqPathResolver: (req) => `/tile${req.url}`
 }))
-
-server.use("/route", proxyRoute("/route"));
-server.use("/tile", proxyRoute("/tile"));
 
 // API routes
 server.use("/zones", zoneRouter);
@@ -44,17 +36,7 @@ server.use("/status", statusRouter);
 server.use("/temps", tempRouter);
 server.use("/disconnected_links", disconnectedLinksRouter);
 server.use("/nodes", nodesRouter); 
-
-// Proxy routes
-server.use("/route", proxy(`${BACKEND_URL}/route`, {
-    proxyReqPathResolver: (req) => `/route${req.url}`
-}));
-
-server.use("/tile", proxy(`${BACKEND_URL}/tile`, {
-    proxyReqPathResolver: (req) => `/tile${req.url}`
-}));
-server.use("/nodes", nodesRouter);
-server.use("/disconnected_links", disconnectedLinksRouter);
+server.use("/route", routeRouter);
 server.use("/nodelist", nodelistRouter);
 server.use("/traffic", trafficRouter);
 

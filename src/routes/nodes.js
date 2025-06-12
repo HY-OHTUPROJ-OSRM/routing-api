@@ -1,5 +1,5 @@
 const { Router } = require("express");
-const databaseConnection = require("../utils/database");
+const NodeService = require("../services/NodeService");
 
 const nodesRouter = Router();
 
@@ -23,64 +23,13 @@ nodesRouter.get("/nearest", async (req, res) => {
       });
     }
     
-    // Try PostGIS first (more accurate)
-    let nearestNodes;
-    try {
-      nearestNodes = await databaseConnection`
-        SELECT 
-          id, 
-          lat, 
-          lon,
-          ST_Distance(
-            ST_SetSRID(ST_MakePoint(lon/10000000.0, lat/10000000.0), 4326)::geography,
-            ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography
-          ) as distance
-        FROM planet_osm_nodes 
-        WHERE lat IS NOT NULL AND lon IS NOT NULL
-        ORDER BY ST_Distance(
-          ST_SetSRID(ST_MakePoint(lon/10000000.0, lat/10000000.0), 4326)::geography,
-          ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography
-        )
-        LIMIT 1
-      `;
-    } catch (postgisError) {
-      console.log('PostGIS not available, falling back to simple calculation');
-      // Fallback to simple distance calculation
-      nearestNodes = await databaseConnection`
-        SELECT 
-          id, 
-          lat, 
-          lon,
-          SQRT(
-            POW((lat/10000000.0 - ${latitude}), 2) + 
-            POW((lon/10000000.0 - ${longitude}), 2)
-          ) as distance
-        FROM planet_osm_nodes 
-        WHERE lat IS NOT NULL AND lon IS NOT NULL
-        ORDER BY SQRT(
-          POW((lat/10000000.0 - ${latitude}), 2) + 
-          POW((lon/10000000.0 - ${longitude}), 2)
-        )
-        LIMIT 1
-      `;
-    }
+    const result = await NodeService.getNearestNode(latitude, longitude);
     
-    if (nearestNodes.length === 0) {
+    if (!result) {
       return res.status(404).json({ 
         message: "No nodes found in the database" 
       });
     }
-    
-    const nearestNode = nearestNodes[0];
-    
-    const result = {
-      nodeId: nearestNode.id,
-      coordinates: {
-        lat: nearestNode.lat / 10000000,
-        lng: nearestNode.lon / 10000000
-      },
-      distance: parseFloat(nearestNode.distance)
-    };
     
     res.json(result);
     
@@ -102,27 +51,13 @@ nodesRouter.get("/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid node ID" });
     }
     
-    // Query coordinates from OSM nodes table
-    const nodes = await databaseConnection`
-      SELECT id, lat, lon 
-      FROM planet_osm_nodes 
-      WHERE id = ${nodeId}
-    `;
+    const coordinates = await NodeService.getNodeCoordinates(nodeId);
     
-    if (nodes.length === 0) {
+    if (!coordinates) {
       return res.status(404).json({ 
         message: `Node ${nodeId} not found in OSM data` 
       });
     }
-    
-    const node = nodes[0];
-    
-    // OSM coordinates usually need conversion (divide by 10000000)
-    const coordinates = {
-      id: node.id,
-      lat: node.lat / 10000000,
-      lng: node.lon / 10000000
-    };
     
     res.json(coordinates);
     
