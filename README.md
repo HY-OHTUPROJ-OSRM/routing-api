@@ -5,7 +5,7 @@
 cd osrm-backend
 ```
 ```
-docker build -f docker/Dockerfile-debian -t osrm-backend-debian:v6.0.0 .
+docker build -f docker/Dockerfile-debian -t osrm-backend:v6.0.0-debian .
 ```
 ```
 cd ..
