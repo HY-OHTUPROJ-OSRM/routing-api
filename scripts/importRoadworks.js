@@ -161,7 +161,7 @@ async function importRoadworks() {
 
     const digitrafficZoneIds = await getPreviousDigitrafficZoneIds();
     const zoneService = new ZoneService();
-    await zoneService.changeZones(zones, digitrafficZoneIds);
+    await zoneService.updateZones(zones, digitrafficZoneIds);
     console.log(
       `Deleted ${digitrafficZoneIds.length} previous digitraffic zones.`
     );

@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const NodeService = require("../services/NodeService");
+const nodeService = new NodeService();
 
 const nodesRouter = Router();
 
@@ -23,7 +24,7 @@ nodesRouter.get("/nearest", async (req, res) => {
       });
     }
     
-    const result = await NodeService.getNearestNode(latitude, longitude);
+    const result = await nodeService.getNearestNode(latitude, longitude);
     
     if (!result) {
       return res.status(404).json({ 
@@ -51,7 +52,7 @@ nodesRouter.get("/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid node ID" });
     }
     
-    const coordinates = await NodeService.getNodeCoordinates(nodeId);
+    const coordinates = await nodeService.getNodeCoordinates(nodeId);
     
     if (!coordinates) {
       return res.status(404).json({ 

@@ -88,6 +88,7 @@ public:
     uint32_t m_id;
     std::vector<s_node *> m_nodes;
     std::string m_name;
+    std::string m_highway;
     uint32_t m_city_code;
 
     s_node &get_start_point()
@@ -139,11 +140,12 @@ auto main() -> int
 
     std::vector<s_node *> deadends;
 
+    auto fixed_way_count = 0;
     for (auto i = 0; i < ways_count; ++i)
     {
-        ways[i].m_id = read_int();
+        ways[fixed_way_count].m_id = read_int();
         const auto way_node_count = read_int();
-        ways[i].m_nodes.resize(way_node_count);
+        ways[fixed_way_count].m_nodes.resize(way_node_count);
         for (auto j = 0; j < way_node_count; ++j)
         {
             const auto id = read_int();
@@ -153,12 +155,21 @@ auto main() -> int
 
             auto node = it->second;
             ++node->count;
-            node->last_way = &ways[i];
-            ways[i].m_nodes[j] = node;
+            node->last_way = &ways[fixed_way_count];
+            ways[fixed_way_count].m_nodes[j] = node;
         }
-        ways[i].m_name = read_string();
-        ways[i].m_city_code = read_int();
+        ways[fixed_way_count].m_name = read_string();
+        ways[fixed_way_count].m_highway = read_string();
+        ways[fixed_way_count].m_city_code = read_int();
+
+        if (ways[fixed_way_count].m_highway == "footway")
+        {
+            continue;
+        }
+
+        ++fixed_way_count;
     }
+    ways.resize(fixed_way_count);
 
     for (auto &way : ways)
     {
@@ -249,6 +260,11 @@ auto main() -> int
                     if (way->m_id == last_way->m_id)
                         continue;
                     if (same_name && way->m_name != last_way->m_name)
+                        continue;
+                    if (last_way->get_start_point().id == way->get_start_point().id ||
+                        last_way->get_start_point().id == way->get_end_point().id ||
+                        last_way->get_end_point().id == way->get_start_point().id ||
+                        last_way->get_end_point().id == way->get_end_point().id)
                         continue;
 
                     process_node(node, &way->get_start_point(), way);
