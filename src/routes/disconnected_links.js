@@ -128,6 +128,7 @@ async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, call
       writeUInt32(id);
     }
     writeString(getTagValue(way.tags, "name", "(unnamed)"));
+    writeString(getTagValue(way.tags, "highway", "unknown"));
     writeUInt32(getTagValue(way.tags, "city_code", 0));
   }
 
@@ -135,9 +136,16 @@ async function getDisconnectedRoads(minDistance, maxDistance, namesAreSame, call
 }
 
 disconnectedLinksRouter.post("/", async (req, res) => {
-  const { minDist, maxDist, namesAreSame } = req.body;
+  const { minDist, maxDist, namesAreSame, forceFetchAll } = req.body;
 
   try {
+    if (forceFetchAll) {
+      await getDisconnectedRoads(minDist, maxDist, namesAreSame, data => {
+        res.json({ data: data });
+      });
+      return;
+    }
+
     const nodes = await databaseConnection`
     SELECT *
     FROM disconnected_links
