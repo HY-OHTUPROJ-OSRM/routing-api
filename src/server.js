@@ -9,12 +9,12 @@ const zoneRouter = require("./routes/zones");
 const segmentRouter = require("./routes/segments");
 const statusRouter = require("./routes/status");
 const tempRouter = require("./routes/temps");
-const { disconnectedLinksRouter } = require("./routes/disconnected_links");
-const nodelistRouter = require("./routes/nodelist");
 const nodesRouter = require("./routes/nodes");
-const { parseVehicleConfig } = require("./utils/vehicle_config");
-const trafficRouter = require("./routes/traffic")
 const routeRouter = require("./routes/route");
+const nodelistRouter = require("./routes/nodelist");
+const trafficRouter = require("./routes/traffic")
+const { disconnectedLinksRouter } = require("./routes/disconnected_links");
+const { parseVehicleConfig } = require("./utils/vehicle_config");
 
 
 const server = express();
@@ -34,12 +34,11 @@ server.use("/zones", zoneRouter);
 server.use("/segments", segmentRouter);
 server.use("/status", statusRouter);
 server.use("/temps", tempRouter);
-server.use("/disconnected_links", disconnectedLinksRouter);
 server.use("/nodes", nodesRouter); 
 server.use("/route", routeRouter);
 server.use("/nodelist", nodelistRouter);
 server.use("/traffic", trafficRouter);
-
+server.use("/disconnected_links", disconnectedLinksRouter);
 
 server.get("/vehicle-config", (req, res) => {
   parseVehicleConfig((err, result) => {

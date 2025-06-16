@@ -4,6 +4,7 @@ const { BACKEND_URL } = require("../utils/config");
 const { isCoordinateBetween } = require("../utils/coordinate_between");
 const TempRoadService = require("../services/TempRoadService");
 const NodeService = require("../services/NodeService");
+const nodeService = new NodeService();
 const fetch = require("node-fetch");
 const { combineOSRMResponses } = require("../utils/route_combiner");
 const turf = require("@turf/turf");
@@ -34,12 +35,12 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
     const tempRoadsWithStartInBetween = [];
 
     for (const road of tempRoads) {
-      const startNodeCoord = await NodeService.getNodeCoordinates(
+      const startNodeCoord = await nodeService.getNodeCoordinates(
         road.start_node
       );
       if (!startNodeCoord) continue;
       if (isCoordinateBetween(start, end, startNodeCoord, 50, leewayKm)) {
-        const endNodeCoord = await NodeService.getNodeCoordinates(
+        const endNodeCoord = await nodeService.getNodeCoordinates(
           road.end_node
         );
         if (!endNodeCoord) continue;
@@ -64,10 +65,10 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
     // (Currently only the first is used; extend here to support multiple temp roads if needed)
     if (tempRoadsWithStartInBetween.length > 0) {
       const tempRoad = tempRoadsWithStartInBetween[0];
-      const startNodeCoord = await NodeService.getNodeCoordinates(
+      const startNodeCoord = await nodeService.getNodeCoordinates(
         tempRoad.start_node
       );
-      const endNodeCoord = await NodeService.getNodeCoordinates(
+      const endNodeCoord = await nodeService.getNodeCoordinates(
         tempRoad.end_node
       );
       // Determine which temp road node is closer to the user's start coordinate

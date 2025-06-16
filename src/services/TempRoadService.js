@@ -5,8 +5,6 @@ const TempRoadRepository = require("../repositories/TempRoadRepository");
 const { makeOutputReader } = require("../utils/process_utils");
 const { ROUTE_DATA_PATH } = require("../utils/config");
 
-// All modifications to this must be atomic at the level of JS execution!
-
 class TempRoadService {
   static activeTempRoads = [];
 

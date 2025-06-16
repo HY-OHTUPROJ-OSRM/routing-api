@@ -6,21 +6,23 @@ const calculateSegmentSpeeds = require("../utils/segment_speeds");
 const { makeOutputReader } = require("../utils/process_utils");
 const { ROUTE_DATA_PATH } = require("../utils/config");
 
+const SEGMENT_SPEED_CSV_PATH = "/tmp/routing-api-segments.csv";
+
 // All modifications to this must be atomic at the level of JS execution!
 
 class ZoneService {
-  static affectedSegments = [];
+  affectedSegments = [];
 
   constructor(repository = new ZoneRepository()) {
     this.repository = repository;
   }
 
   static async init() {
-    await new ZoneService().updateBlockedSegments();
+    await new ZoneService().refreshBlockedSegments();
   }
 
-  static async getBlockedSegments() {
-    return ZoneService.affectedSegments;
+  async getBlockedSegments() {
+    return this.affectedSegments;
   }
 
   async getZones() {
@@ -30,10 +32,10 @@ class ZoneService {
   /**
    * Handles changing zones within a transaction.
    */
-  async changeZonesWithTransaction(newZones, deletedZones) {
+  async updateZones(addedZones, deletedZones) {
     await this.repository.beginTransaction();
     try {
-      await this.changeZones(newZones, deletedZones);
+      await this._changeZones(addedZones, deletedZones);
       await this.repository.commitTransaction();
     } catch (error) {
       await this.repository.rollbackTransaction();
@@ -41,10 +43,12 @@ class ZoneService {
     }
   }
 
-  async changeZones(newZones, deletedZones) {
+  async _changeZones(newZones, deletedZones) {
+    // Avoid mutating input
     for (const zone of newZones) {
-      delete zone.properties.id;
-      await this.repository.create(zone);
+      const zoneCopy = JSON.parse(JSON.stringify(zone));
+      delete zoneCopy.properties.id;
+      await this.repository.create(zoneCopy);
     }
 
     console.log(`${newZones ? newZones.length : 0} zones created`);
@@ -53,10 +57,10 @@ class ZoneService {
 
     console.log(`${deletedZones ? deletedZones.length : 0} zones deleted`);
 
-    await this.updateBlockedSegments();
+    await this.refreshBlockedSegments();
   }
 
-  async updateBlockedSegments() {
+  async refreshBlockedSegments() {
     process.stdout.write("fetching all paths overlapping zones...");
     const paths = await this.repository.getPathsOverlappingZones();
     console.log(" done");
@@ -99,7 +103,7 @@ class ZoneService {
 
     // Restore the original speeds for segments that
     // were affected previously but not anymore.
-    for (const segment of ZoneService.affectedSegments) {
+    for (const segment of this.affectedSegments) {
       const startID = segment.start.id;
       const endID = segment.end.id;
 
@@ -109,10 +113,10 @@ class ZoneService {
       }
     }
 
-    ZoneService.affectedSegments = Array.from(newSegments.values());
+    this.affectedSegments = Array.from(newSegments.values());
 
     // Set speeds for new segments
-    for (const segment of ZoneService.affectedSegments) {
+    for (const segment of this.affectedSegments) {
       const startID = segment.start.id;
       const endID = segment.end.id;
 
@@ -120,29 +124,28 @@ class ZoneService {
       lines.push(`${endID},${startID},${segment.currentSpeed}`);
     }
 
-    await ZoneService.writeCSV(lines.join("\n"));
+    await this.writeCSV(lines.join("\n"));
   }
 
   async createZones(zones) {
-    await this.changeZones(zones, []);
+    await this.updateZones(zones, []);
   }
 
-  static async deleteZone(id) {
-    const repository = new ZoneRepository();
-    await repository.beginTransaction();
+  async deleteZone(id) {
+    await this.repository.beginTransaction();
     try {
-      await repository.delete([parseInt(id)]);
-      await repository.commitTransaction();
+      await this.repository.delete([parseInt(id)]);
+      await this.repository.commitTransaction();
       // Update blocked segments after deletion
-      await new ZoneService().updateBlockedSegments();
+      await this.refreshBlockedSegments();
     } catch (error) {
-      await repository.rollbackTransaction();
+      await this.repository.rollbackTransaction();
       throw error;
     }
   }
 
-  static async writeCSV(csv) {
-    const filename = "/tmp/routing-api-segments.csv";
+  async writeCSV(csv) {
+    const filename = SEGMENT_SPEED_CSV_PATH;
     const file = await open(filename, "w");
     await file.write(csv);
     await file.close();

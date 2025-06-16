@@ -1,7 +1,6 @@
 const { Router } = require("express");
 const ZoneService = require("../services/ZoneService");
 const StatusService = require("../services/StatusService");
-const ZoneRepository = require("../repositories/ZoneRepository");
 const validator = require("../components/Validators");
 
 const zoneRouter = Router();
@@ -66,15 +65,10 @@ zoneRouter.post("/diff", async (req, res) => {
       .json({ message: "This resource is currently in use." });
   }
 
-  const repository = new ZoneRepository();
-  await repository.beginTransaction();
-
   try {
-    await new ZoneService(repository).changeZones(added, deleted);
-    await repository.commitTransaction();
+    await zoneService.updateZones(added, deleted);
     res.status(201).send();
   } catch (error) {
-    await repository.rollbackTransaction();
     handleError(res, "An error occurred while changing zones.", error);
   } finally {
     releaseZoneRouterLock();
@@ -96,7 +90,7 @@ zoneRouter.post("/", async (req, res) => {
 zoneRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    await ZoneService.deleteZone(id);
+    await zoneService.deleteZone(id);
     res
       .status(200)
       .json({ message: `Zone with id ${id} deleted successfully` });
