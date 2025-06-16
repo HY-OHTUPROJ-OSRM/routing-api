@@ -140,7 +140,7 @@ class ZoneRepository {
         )
         SELECT
           way_id,
-          ANY_VALUE(speed) AS speed,
+          ARRAY_AGG(speed)[1] AS speed,
           ARRAY_AGG(ARRAY[node_id, lat, lon] ORDER BY node_pos) AS nodes
         FROM
           located_nodes
