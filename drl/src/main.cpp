@@ -1,12 +1,14 @@
 #include <iostream>
 #include <string>
-#include <unordered_map>
-#include <vector>
 #include <cmath>
+#include <vector>
+#include <set>
+#include <queue>
+#include <unordered_map>
+#include <unordered_set>
 #include <stdexcept>
 #include <cstdint>
 #include <cstring>
-#include <set>
 
 auto read_int() -> uint32_t
 {
@@ -30,7 +32,7 @@ auto read_double() -> double
     uint8_t buffer[8];
     std::cin.read(reinterpret_cast<char *>(buffer), 8);
     uint64_t raw = 0;
-    for (int i = 7; i >= 0; --i)
+    for (auto i = 7; i >= 0; --i)
     {
         raw = (raw << 8) | buffer[i];
     }
@@ -54,20 +56,18 @@ constexpr auto to_rad(double degrees) -> double
 
 auto get_haversine_distance(double lat1, double lon1, double lat2, double lon2) -> double
 {
-    constexpr auto R = 6371000.0;
+    constexpr auto r = 6371000.0;
 
-    const auto φ1 = to_rad(lat1);
-    const auto φ2 = to_rad(lat2);
-    const auto Δφ = to_rad(lat2 - lat1);
-    const auto Δλ = to_rad(lon2 - lon1);
+    const auto lat1_rad = to_rad(lat1);
+    const auto lat2_rad = to_rad(lat2);
+    const auto dlat_rad = to_rad(lat2 - lat1);
+    const auto d_lon_rad = to_rad(lon2 - lon1);
 
-    const auto a = std::sin(Δφ / 2) * std::sin(Δφ / 2) +
-                   std::cos(φ1) * std::cos(φ2) *
-                       std::sin(Δλ / 2) * std::sin(Δλ / 2);
+    const auto a = std::sin(dlat_rad / 2.0) * std::sin(dlat_rad / 2.0) + std::cos(lat1_rad) * std::cos(lat2_rad) * std::sin(d_lon_rad / 2.0) * std::sin(d_lon_rad / 2.0);
 
-    const auto c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+    const auto c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
 
-    return R * c;
+    return r * c;
 }
 
 struct s_node
@@ -80,6 +80,7 @@ struct s_node
     int count = 0;
     void *last_way = nullptr;
     bool deadend = false;
+    std::unordered_set<s_node *> neighbors;
 };
 
 class c_way
@@ -91,14 +92,14 @@ public:
     std::string m_highway;
     uint32_t m_city_code;
 
-    s_node &get_start_point()
+    s_node *get_start_point()
     {
-        return *this->m_nodes[0];
+        return this->m_nodes[0];
     }
 
-    s_node &get_end_point()
+    s_node *get_end_point()
     {
-        return *this->m_nodes[this->m_nodes.size() - 1];
+        return this->m_nodes[this->m_nodes.size() - 1];
     }
 };
 
@@ -113,6 +114,37 @@ inline auto get_bin_key(double lat_deg, double lon_deg) -> std::pair<int, int>
 {
     return {static_cast<int>(lat_deg / bin_size),
             static_cast<int>(lon_deg / bin_size)};
+}
+
+auto bfs_distance(s_node *start, s_node *goal) -> int
+{
+    if (start == goal)
+        return 0;
+
+    std::queue<std::pair<s_node *, int>> q;
+    std::unordered_set<uint32_t> visited;
+
+    q.push({start, 0});
+    visited.insert(start->id);
+
+    while (!q.empty())
+    {
+        const auto [current, distance] = q.front();
+        q.pop();
+
+        for (auto neighbor : current->neighbors)
+        {
+            if (visited.count(neighbor->id))
+                continue;
+            if (neighbor == goal)
+                return distance + 1;
+
+            visited.insert(neighbor->id);
+            q.push({neighbor, distance + 1});
+        }
+    }
+
+    return -1;
 }
 
 auto main() -> int
@@ -153,7 +185,7 @@ auto main() -> int
             if (it == node_map.end())
                 throw std::runtime_error("Node ID not found for way");
 
-            auto node = it->second;
+            const auto node = it->second;
             ++node->count;
             node->last_way = &ways[fixed_way_count];
             ways[fixed_way_count].m_nodes[j] = node;
@@ -171,10 +203,23 @@ auto main() -> int
     }
     ways.resize(fixed_way_count);
 
+    for (auto i = 0; i < fixed_way_count; ++i)
+    {
+        const auto &way = ways[i];
+
+        for (auto j = 1; j < way.m_nodes.size(); ++j)
+        {
+            const auto a = way.m_nodes[j - 1];
+            const auto b = way.m_nodes[j];
+            a->neighbors.insert(b);
+            b->neighbors.insert(a);
+        }
+    }
+
     for (auto &way : ways)
     {
-        const auto start_node = &way.get_start_point();
-        const auto end_node = &way.get_end_point();
+        const auto start_node = way.get_start_point();
+        const auto end_node = way.get_end_point();
         if (start_node->count == 1 && !start_node->deadend)
         {
             start_node->deadend = true;
@@ -193,7 +238,7 @@ auto main() -> int
     {
         auto sum_lat = 0.0;
         auto sum_lon = 0.0;
-        for (auto *node : way.m_nodes)
+        for (auto node : way.m_nodes)
         {
             sum_lat += node->lat_f;
             sum_lon += node->lon_f;
@@ -206,11 +251,8 @@ auto main() -> int
         way_bins[key].push_back(&way);
     }
 
-    for (auto &node : deadends)
+    for (auto node : deadends)
     {
-        // if (node->count != 1)
-        //     continue;
-
         const auto lat0 = node->lat_f;
         const auto lon0 = node->lon_f;
 
@@ -219,7 +261,7 @@ auto main() -> int
         const auto [x0, y0] = get_bin_key(lat0, lon0);
 
         std::set<int> visited;
-        auto process_node = [&](s_node *node, s_node *start_node, c_way *way) -> void
+        const auto process_node = [&](s_node *node, s_node *start_node, c_way *way) -> void
         {
             if (start_node->id == node->id)
                 return;
@@ -230,6 +272,9 @@ auto main() -> int
             const auto dist = get_haversine_distance(lat0, lon0, start_node->lat_f, start_node->lon_f);
 
             if (dist < min_dist || dist > max_dist)
+                return;
+
+            if (bfs_distance(node, start_node) >= 0)
                 return;
 
             visited.insert(node->id);
@@ -261,14 +306,19 @@ auto main() -> int
                         continue;
                     if (same_name && way->m_name != last_way->m_name)
                         continue;
-                    if (last_way->get_start_point().id == way->get_start_point().id ||
-                        last_way->get_start_point().id == way->get_end_point().id ||
-                        last_way->get_end_point().id == way->get_start_point().id ||
-                        last_way->get_end_point().id == way->get_end_point().id)
-                        continue;
 
-                    process_node(node, &way->get_start_point(), way);
-                    process_node(node, &way->get_end_point(), way);
+                    const auto start_point = way->get_start_point();
+                    const auto end_point = way->get_end_point();
+                    if (last_way->get_start_point()->id == start_point->id ||
+                        last_way->get_start_point()->id == end_point->id ||
+                        last_way->get_end_point()->id == start_point->id ||
+                        last_way->get_end_point()->id == end_point->id)
+                    {
+                        continue;
+                    }
+
+                    process_node(node, start_point, way);
+                    process_node(node, end_point, way);
                 }
             }
         }
