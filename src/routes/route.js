@@ -3,8 +3,6 @@ const proxy = require("express-http-proxy");
 const { BACKEND_URL } = require("../utils/config");
 const { isCoordinateBetween } = require("../utils/coordinate_between");
 const TempRoadService = require("../services/TempRoadService");
-const NodeService = require("../services/NodeService");
-const nodeService = new NodeService();
 const fetch = require("node-fetch");
 const { combineOSRMResponses } = require("../utils/route_combiner");
 const turf = require("@turf/turf");
@@ -35,16 +33,28 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
     const tempRoadsWithStartInBetween = [];
 
     for (const road of tempRoads) {
-      const startNodeCoord = await nodeService.getNodeCoordinates(
-        road.start_node
-      );
-      if (!startNodeCoord) continue;
-      if (isCoordinateBetween(start, end, startNodeCoord, 50, leewayKm)) {
-        const endNodeCoord = await nodeService.getNodeCoordinates(
-          road.end_node
+      if (
+        !road.geom ||
+        road.geom.type !== "LineString" ||
+        !Array.isArray(road.geom.coordinates) ||
+        road.geom.coordinates.length < 2
+      ) {
+        console.error(
+          `Temp road missing valid LineString geometry: id=${road.id || 'unknown'}, name=${road.name || 'unknown'}`
         );
-        if (!endNodeCoord) continue;
+        continue;
+      }
+      const coords = road.geom.coordinates;
+      const startNodeCoord = { lng: coords[0][0], lat: coords[0][1] };
+      const endNodeCoord = {
+        lng: coords[coords.length - 1][0],
+        lat: coords[coords.length - 1][1],
+      };
+      if (isCoordinateBetween(start, end, startNodeCoord, 50, leewayKm)) {
         if (isCoordinateBetween(start, end, endNodeCoord, 50, leewayKm)) {
+          // Attach parsed coordinates for later use
+          road._startCoord = startNodeCoord;
+          road._endCoord = endNodeCoord;
           tempRoadsWithStartInBetween.push(road);
         }
       }
@@ -65,12 +75,8 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
     // (Currently only the first is used; extend here to support multiple temp roads if needed)
     if (tempRoadsWithStartInBetween.length > 0) {
       const tempRoad = tempRoadsWithStartInBetween[0];
-      const startNodeCoord = await nodeService.getNodeCoordinates(
-        tempRoad.start_node
-      );
-      const endNodeCoord = await nodeService.getNodeCoordinates(
-        tempRoad.end_node
-      );
+      const startNodeCoord = tempRoad._startCoord;
+      const endNodeCoord = tempRoad._endCoord;
       // Determine which temp road node is closer to the user's start coordinate
       const distToStartNode = turf.distance(
         [start.lng, start.lat],
@@ -106,10 +112,30 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
         // If fetching temp road segments fails, fall back to normal route
         return res.json(normalResp);
       }
+      // Prepare geometry for connecting road in correct driving order
+      let connectingGeometry = tempRoad.geom;
+      if (
+        connectingGeometry &&
+        connectingGeometry.type === "LineString" &&
+        Array.isArray(connectingGeometry.coordinates)
+      ) {
+        const coords = connectingGeometry.coordinates;
+        // If entryCoord does not match the first coordinate, reverse the geometry
+        if (
+          coords.length >= 2 &&
+          (coords[0][0] !== entryCoord.lng || coords[0][1] !== entryCoord.lat)
+        ) {
+          connectingGeometry = {
+            type: "LineString",
+            coordinates: [...coords].reverse(),
+          };
+        }
+      }
       // Combine the two route segments with the temp road and compare to the normal route
       const connectingRoad = {
         distance: tempRoad.length,
         speed: tempRoad.speed,
+        geometry: connectingGeometry,
       };
       const combined = combineOSRMResponses(
         resp1,

@@ -9,12 +9,16 @@ class TempRoadRepository {
     try {
       const result = await this.sql`
         SELECT
-          id, type, name, status, tags, start_node, end_node,
+          id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, created_at, updated_at
         FROM
           temporary_routes;
       `;
-      return result.map(item => ({...item, tags: JSON.parse(item.tags)}));
+      return result.map(item => ({
+        ...item,
+        tags: JSON.parse(item.tags),
+        geom: item.geom ? JSON.parse(item.geom) : null
+      }));
     } catch (err) {
       throw new Error(`Failed to fetch all temporary routes: ${err.message}`);
     }
@@ -24,7 +28,7 @@ class TempRoadRepository {
     try {
       const result = await this.sql`
         SELECT
-          id, type, name, status, tags, start_node, end_node,
+          id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, created_at, updated_at
         FROM
           temporary_routes
@@ -34,6 +38,7 @@ class TempRoadRepository {
       if (result && result.length > 0) {
         const item = result[0];
         item.tags = JSON.parse(item.tags);
+        item.geom = item.geom ? JSON.parse(item.geom) : null;
         return item;
       }
       return null;
@@ -48,8 +53,7 @@ class TempRoadRepository {
       name,
       status = true,
       tags = [],
-      start_node,
-      end_node,
+      geom,
       length,
       speed,
       max_weight = null,
@@ -60,18 +64,22 @@ class TempRoadRepository {
     try {
       const result = await this.sql`
         INSERT INTO temporary_routes (
-          type, name, status, tags, start_node, end_node,
+          type, name, status, tags, geom,
           length, speed, max_weight, max_height, description
         )
         VALUES (
           ${type}, ${name}, ${status}, ${JSON.stringify(tags)},
-          ${start_node}, ${end_node}, ${length}, ${speed}, ${max_weight}, ${max_height}, ${description}
+          ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geom)}), 3857),
+          ${length}, ${speed}, ${max_weight}, ${max_height}, ${description}
         )
         RETURNING
-          id, type, name, status, tags, start_node, end_node,
+          id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, created_at, updated_at;
       `;
-      return result[0];
+      const item = result[0];
+      item.tags = JSON.parse(item.tags);
+      item.geom = item.geom ? JSON.parse(item.geom) : null;
+      return item;
     } catch (err) {
       throw new Error(`Failed to create temporary route: ${err.message}`);
     }
@@ -87,8 +95,7 @@ class TempRoadRepository {
       "name",
       "status",
       "tags",
-      "start_node",
-      "end_node",
+      "geom",
       "length",
       "speed",
       "max_weight",
@@ -101,8 +108,16 @@ class TempRoadRepository {
 
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedFields.includes(key)) continue;
-      setClauses.push(`${key} = $${idx++}`);
-      values.push(value);
+      if (key === "tags") {
+        setClauses.push(`${key} = $${idx++}`);
+        values.push(JSON.stringify(value));
+      } else if (key === "geom") {
+        setClauses.push(`${key} = ST_SetSRID(ST_GeomFromGeoJSON($${idx++}), 3857)`);
+        values.push(JSON.stringify(value));
+      } else {
+        setClauses.push(`${key} = $${idx++}`);
+        values.push(value);
+      }
     }
 
     if (setClauses.length === 0) {
@@ -119,13 +134,17 @@ class TempRoadRepository {
       WHERE
         id = $${idx}
       RETURNING
-        id, type, name, status, tags, start_node, end_node,
+        id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
         length, speed, max_weight, max_height, description, created_at, updated_at;
     `;
 
     try {
       const result = await this.sql.unsafe(query, values);
-      return result[0] || null;
+      if (!result[0]) return null;
+      const item = result[0];
+      item.tags = JSON.parse(item.tags);
+      item.geom = item.geom ? JSON.parse(item.geom) : null;
+      return item;
     } catch (err) {
       throw new Error(`Failed to update temporary route: ${err.message}`);
     }
@@ -155,10 +174,13 @@ class TempRoadRepository {
         WHERE
           id = ${id}
         RETURNING
-          id, type, name, status, tags, start_node, end_node,
+          id, type, name, status, tags, geom,
           length, speed, max_weight, max_height, description, created_at, updated_at;
       `;
-      return result[0];
+      const item = result[0];
+      item.tags = JSON.parse(item.tags);
+      item.geom = item.geom ? JSON.parse(item.geom) : null;
+      return item;
     } catch (err) {
       throw new Error(
         `Failed to toggle temporary route status: ${err.message}`

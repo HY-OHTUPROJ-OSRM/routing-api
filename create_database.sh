@@ -34,8 +34,7 @@ CREATE TABLE IF NOT EXISTS temporary_routes(
     name TEXT,
     status BOOLEAN DEFAULT true,
     tags JSONB DEFAULT '[]',
-    start_node INTEGER,
-    end_node INTEGER,
+    geom GEOMETRY(LINESTRING, 3857) CHECK (ST_IsValid(geom)),
     length DOUBLE PRECISION,
     speed INTEGER,
     max_weight DOUBLE PRECISION,
@@ -82,8 +81,6 @@ CREATE TABLE IF NOT EXISTS disconnected_links (
 CREATE INDEX IF NOT EXISTS idx_disc_links_start_node ON disconnected_links(start_node);
 CREATE INDEX IF NOT EXISTS idx_disc_links_end_node   ON disconnected_links(end_node);
 
-CREATE INDEX IF NOT EXISTS idx_temp_routes_start_node ON temporary_routes(start_node);
-CREATE INDEX IF NOT EXISTS idx_temp_routes_end_node ON temporary_routes(end_node);
 CREATE INDEX IF NOT EXISTS sidx_zones_geom ON zones USING GIST(geom);
 "
 

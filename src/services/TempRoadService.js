@@ -1,9 +1,54 @@
 const { spawn } = require("child_process");
 const { open, unlink } = require("fs").promises;
-
 const TempRoadRepository = require("../repositories/TempRoadRepository");
 const { makeOutputReader } = require("../utils/process_utils");
 const { ROUTE_DATA_PATH } = require("../utils/config");
+const NodeService = require("./NodeService");
+const nodeService = new NodeService();
+
+// (!) TEMPORARY BACKWARD COMPATIBILITY MIDDLEWARE FOR START/END NODE <-> GEOMETRY
+async function legacyNodeToGeom(data) {
+  // If start_node and end_node are present, convert to geom
+  if (data.start_node && data.end_node && !data.geom) {
+    const start = await nodeService.getNodeCoordinates(data.start_node);
+    const end = await nodeService.getNodeCoordinates(data.end_node);
+    if (start && end) {
+      data.geom = {
+        type: "LineString",
+        coordinates: [
+          [start.lng, start.lat],
+          [end.lng, end.lat],
+        ],
+      };
+    }
+  }
+  return data;
+}
+
+async function legacyGeomToNode(road) {
+  // If geom exists, convert first/last coordinates to start_node/end_node
+  if (
+    road.geom &&
+    road.geom.type === "LineString" &&
+    Array.isArray(road.geom.coordinates)
+  ) {
+    const coords = road.geom.coordinates;
+    if (coords.length >= 2) {
+      const startCoord = coords[0];
+      const endCoord = coords[coords.length - 1];
+      // Find nearest node for each endpoint
+      const startNode = await nodeService.getNearestNode(
+        startCoord[1],
+        startCoord[0]
+      );
+      const endNode = await nodeService.getNearestNode(endCoord[1], endCoord[0]);
+      road.start_node = startNode ? startNode.nodeId : null;
+      road.end_node = endNode ? endNode.nodeId : null;
+    }
+  }
+  return road;
+}
+// (!) END TEMPORARY BACKWARD COMPATIBILITY MIDDLEWARE
 
 class TempRoadService {
   static activeTempRoads = [];
@@ -21,21 +66,27 @@ class TempRoadService {
   }
 
   async getAllTempRoads() {
-    return this.repository.getAll();
+    const roads = await this.repository.getAll();
+    // (!) Add start_node/end_node to each road for front compatibility
+    return Promise.all(roads.map(legacyGeomToNode));
   }
 
   async getTempRoadById(id) {
-    return this.repository.getById(id);
+    const road = await this.repository.getById(id);
+    return road ? legacyGeomToNode(road) : null;
   }
 
   async createTempRoad(data) {
     try {
+      // (!) Convert start_node/end_node to geom if needed
+      await legacyNodeToGeom(data);
       const newRoad = await this.repository.create(data);
       console.log(`New temporary road created with ID: ${newRoad.id}`);
       if (newRoad.status) {
         await this.updateTempRoads();
       }
-      return newRoad;
+      // (!) Add start_node/end_node for response
+      return legacyGeomToNode(newRoad);
     } catch (err) {
       console.error("Failed to create temporary road:", err);
       throw err;
@@ -48,10 +99,13 @@ class TempRoadService {
       if (!existing) {
         throw new Error(`Temporary road with ID ${id} does not exist`);
       }
+      // (!) Convert start_node/end_node to geom if needed
+      await legacyNodeToGeom(updates);
       const updated = await this.repository.update(id, updates);
       console.log(`Temporary road with ID ${id} updated`);
       await this.updateTempRoads();
-      return updated;
+      // (!) Add start_node/end_node for response
+      return legacyGeomToNode(updated);
     } catch (err) {
       console.error(`Failed to update temporary road with ID ${id}:`, err);
       throw err;
@@ -84,7 +138,8 @@ class TempRoadService {
         `Temporary road with ID ${id} toggled to status: ${toggled.status}`
       );
       await this.updateTempRoads();
-      return toggled;
+      // (!) Add start_node/end_node for response
+      return legacyGeomToNode(toggled);
     } catch (err) {
       console.error(`Failed to toggle temporary road with ID ${id}:`, err);
       throw err;
@@ -105,13 +160,29 @@ class TempRoadService {
 
       // Process all active temporary roads
       for (const road of activeRoads) {
-        const startNodeId = road.start_node;
-        const endNodeId = road.end_node;
-        const speed = road.speed;
-
-        // Add bidirectional connections
-        lines.push(`${startNodeId},${endNodeId},${speed}`);
-        lines.push(`${endNodeId},${startNodeId},${speed}`);
+        // (!) Use geometry endpoints to get node ids for OSRM CSV
+        if (
+          road.geom &&
+          road.geom.type === "LineString" &&
+          Array.isArray(road.geom.coordinates)
+        ) {
+          const coords = road.geom.coordinates;
+          if (coords.length >= 2) {
+            const startNode = await nodeService.getNearestNode(
+              coords[0][1],
+              coords[0][0]
+            );
+            const endNode = await nodeService.getNearestNode(
+              coords[coords.length - 1][1],
+              coords[coords.length - 1][0]
+            );
+            if (startNode && endNode) {
+              const speed = road.speed;
+              lines.push(`${startNode.nodeId},${endNode.nodeId},${speed}`);
+              lines.push(`${endNode.nodeId},${startNode.nodeId},${speed}`);
+            }
+          }
+        }
       }
 
       if (lines.length > 0) {
@@ -183,14 +254,14 @@ class TempRoadService {
 
   async batchUpdateTempRoads(newRoads, deletedRoadIds) {
     try {
-      await Promise.all(newRoads.map((road) => this.repository.create(road)));
+      await Promise.all(
+        newRoads.map(async (road) => this.createTempRoad(road))
+      );
       console.log(`${newRoads ? newRoads.length : 0} temporary roads created`);
-
       await Promise.all(deletedRoadIds.map((id) => this.repository.delete(id)));
       console.log(
         `${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`
       );
-
       await this.updateTempRoads();
     } catch (err) {
       console.error("Failed to batch update temporary roads:", err);

@@ -3,6 +3,7 @@
  *
  * - Takes two OSRM route responses (start→temp road start, temp road end→end) and a connecting road segment.
  * - Inserts a synthetic step for the connecting road, with geometry and timing based on provided distance and speed.
+ * - If connectingRoad.geometry (GeoJSON LineString) is provided, uses it for the connecting step geometry.
  * - Updates route and leg totals (distance, duration, summary, steps) to reflect the combined route.
  * - Returns a new OSRM response object, or null if either input response is invalid.
  *
@@ -10,7 +11,7 @@
  * @param {object} resp2 - OSRM response for the second route segment (temp road end to end).
  * @param {object} tempRoadStartCoord - Coordinates {lng, lat} for the start of the temporary road.
  * @param {object} tempRoadEndCoord - Coordinates {lng, lat} for the end of the temporary road.
- * @param {object} [connectingRoad] - Optional parameter with `speed` (km/h) and `distance` (km) for the connecting road.
+ * @param {object} [connectingRoad] - Optional parameter with `speed` (km/h), `distance` (km), and optional `geometry` (GeoJSON LineString) for the connecting road.
  * @returns {object|null} Combined OSRM response object, or null if combination is not possible.
  */
 function combineOSRMResponses(resp1, resp2, tempRoadStartCoord, tempRoadEndCoord, connectingRoad) {
@@ -28,10 +29,19 @@ function combineOSRMResponses(resp1, resp2, tempRoadStartCoord, tempRoadEndCoord
   // Create a step representing the connecting road between the two segments
   let connectingDistance = 0;
   let connectingDuration = 0;
+  let connectingGeometry = {
+    type: 'LineString',
+    coordinates: [
+      [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
+      [tempRoadEndCoord.lng, tempRoadEndCoord.lat],
+    ],
+  };
   if (connectingRoad && typeof connectingRoad.distance === 'number' && typeof connectingRoad.speed === 'number') {
-    // distance in km, speed in km/h, duration in seconds
     connectingDistance = connectingRoad.distance * 1000; // convert km to meters
     connectingDuration = (connectingRoad.distance / connectingRoad.speed) * 3600; // hours to seconds
+    if (connectingRoad.geometry && connectingRoad.geometry.type === 'LineString' && Array.isArray(connectingRoad.geometry.coordinates) && connectingRoad.geometry.coordinates.length >= 2) {
+      connectingGeometry = connectingRoad.geometry;
+    }
   }
   const middleStep = {
     intersections: [{
@@ -41,14 +51,7 @@ function combineOSRMResponses(resp1, resp2, tempRoadStartCoord, tempRoadEndCoord
       location: [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
     }],
     driving_side: 'right',
-    geometry: {
-      type: 'LineString',
-      // Straight line from connecting road start to end
-      coordinates: [
-        [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
-        [tempRoadEndCoord.lng, tempRoadEndCoord.lat],
-      ],
-    },
+    geometry: connectingGeometry,
     maneuver: {
       // Maneuver at the start of the connecting road
       location: [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
