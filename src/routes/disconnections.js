@@ -59,4 +59,4 @@ disconnectionsRouter.patch("/:id/hide", async (req, res) => {
   }
 });
 
-module.exports = { disconnectionsRouter };
+module.exports = disconnectionsRouter;
