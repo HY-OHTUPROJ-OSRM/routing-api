@@ -27,10 +27,11 @@ CREATE TABLE IF NOT EXISTS zones (
     effect_value DOUBLE PRECISION,
     source TEXT,
     geom GEOMETRY(POLYGON, 3857) CHECK (ST_IsValid(geom)),
-    updated_at TIMESTAMP DEFAULT NOW()
+    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS temporary_routes (
+CREATE TABLE IF NOT EXISTS temporary_routes(
     id SERIAL PRIMARY KEY,
     type TEXT,
     name TEXT,

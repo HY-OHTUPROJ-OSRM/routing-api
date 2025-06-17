@@ -236,22 +236,21 @@ async function fetchDisconnectedLinks() {
 
 disconnectedLinksRouter.patch("/:id", async (req, res) => {
   const discId     = Number(req.params.id);
-  const { temp_road_id } = req.body;
-
+  const { temp_road_id, updated_at } = req.body;
+  if (!updated_at) {
+    return res.status(400).json({ message: "Missing 'updated_at' for concurrency control." });
+  }
   try {
     const result = await databaseConnection`
       UPDATE disconnected_links
       SET    temp_road_id = ${temp_road_id},
              updated_at   = NOW()
-      WHERE  id = ${discId}
+      WHERE  id = ${discId} AND updated_at = ${updated_at}
       RETURNING id, temp_road_id;
     `;
-    console.log("RETURNING rows =", result);
-
     if (result.length === 0) {
-      return res.status(404).json({ message: "Disconnection not found" });
+      return res.status(409).json({ message: "Conflict: The resource was modified by another user." });
     }
-
     res.json({ success: true, row: result[0] });
   } catch (err) {
     console.error("Error updating temp_road_id:", err);
@@ -261,15 +260,19 @@ disconnectedLinksRouter.patch("/:id", async (req, res) => {
 
 disconnectedLinksRouter.patch("/:id/hide", async (req, res) => {
   const discId = Number(req.params.id);
+  const { updated_at } = req.body;
+  if (!updated_at) {
+    return res.status(400).json({ message: "Missing 'updated_at' for concurrency control." });
+  }
   try {
     const result = await databaseConnection`
       UPDATE disconnected_links
       SET hide_status = NOT hide_status,
           updated_at  = NOW()
-      WHERE id = ${discId}
+      WHERE id = ${discId} AND updated_at = ${updated_at}
       RETURNING id, hide_status;
     `;
-    if (result.length === 0) return res.status(404).json({ message: "Not found" });
+    if (result.length === 0) return res.status(409).json({ message: "Conflict: The resource was modified by another user." });
     res.json({ success: true, row: result[0] });
   } catch (err) {
     res.status(500).json({ message: "Failed to hide/show", error: err.message });
