@@ -27,20 +27,13 @@ async function legacyNodeToGeom(data) {
 
 async function legacyGeomToNode(road) {
   // If geom exists, convert first/last coordinates to start_node/end_node
-  if (
-    road.geom &&
-    road.geom.type === "LineString" &&
-    Array.isArray(road.geom.coordinates)
-  ) {
+  if (road.geom && road.geom.type === "LineString" && Array.isArray(road.geom.coordinates)) {
     const coords = road.geom.coordinates;
     if (coords.length >= 2) {
       const startCoord = coords[0];
       const endCoord = coords[coords.length - 1];
       // Find nearest node for each endpoint
-      const startNode = await nodeService.getNearestNode(
-        startCoord[1],
-        startCoord[0]
-      );
+      const startNode = await nodeService.getNearestNode(startCoord[1], startCoord[0]);
       const endNode = await nodeService.getNearestNode(endCoord[1], endCoord[0]);
       road.start_node = startNode ? startNode.nodeId : null;
       road.end_node = endNode ? endNode.nodeId : null;
@@ -140,9 +133,7 @@ class TempRoadService {
         throw new Error(`Temporary road with ID ${id} does not exist`);
       }
       const toggled = await this.repository.toggleActive(id);
-      console.log(
-        `Temporary road with ID ${id} toggled to status: ${toggled.status}`
-      );
+      console.log(`Temporary road with ID ${id} toggled to status: ${toggled.status}`);
       await this.updateTempRoads();
       // (!) Add start_node/end_node for response
       return legacyGeomToNode(toggled);
@@ -167,17 +158,10 @@ class TempRoadService {
       // Process all active temporary roads
       for (const road of activeRoads) {
         // (!) Use geometry endpoints to get node ids for OSRM CSV
-        if (
-          road.geom &&
-          road.geom.type === "LineString" &&
-          Array.isArray(road.geom.coordinates)
-        ) {
+        if (road.geom && road.geom.type === "LineString" && Array.isArray(road.geom.coordinates)) {
           const coords = road.geom.coordinates;
           if (coords.length >= 2) {
-            const startNode = await nodeService.getNearestNode(
-              coords[0][1],
-              coords[0][0]
-            );
+            const startNode = await nodeService.getNearestNode(coords[0][1], coords[0][0]);
             const endNode = await nodeService.getNearestNode(
               coords[coords.length - 1][1],
               coords[coords.length - 1][0]
@@ -210,20 +194,10 @@ class TempRoadService {
 
     console.log("Wrote temporary roads CSV file");
 
-    const contract = spawn("osrm-contract", [
-      "--segment-speed-file",
-      filename,
-      ROUTE_DATA_PATH,
-    ]);
+    const contract = spawn("osrm-contract", ["--segment-speed-file", filename, ROUTE_DATA_PATH]);
 
-    contract.stdout.on(
-      "data",
-      makeOutputReader("osrm-contract", process.stdout)
-    );
-    contract.stderr.on(
-      "data",
-      makeOutputReader("osrm-contract", process.stderr)
-    );
+    contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout));
+    contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr));
 
     return new Promise((resolve, reject) => {
       contract.on("exit", (code, signal) => {
@@ -236,14 +210,8 @@ class TempRoadService {
 
         const datastore = spawn("osrm-datastore", [ROUTE_DATA_PATH]);
 
-        datastore.stdout.on(
-          "data",
-          makeOutputReader("osrm-datastore", process.stdout)
-        );
-        datastore.stderr.on(
-          "data",
-          makeOutputReader("osrm-datastore", process.stderr)
-        );
+        datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout));
+        datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr));
 
         datastore.on("exit", (code, signal) => {
           if (code != 0) {
@@ -260,14 +228,10 @@ class TempRoadService {
 
   async batchUpdateTempRoads(newRoads, deletedRoadIds) {
     try {
-      await Promise.all(
-        newRoads.map(async (road) => this.createTempRoad(road))
-      );
+      await Promise.all(newRoads.map(async (road) => this.createTempRoad(road)));
       console.log(`${newRoads ? newRoads.length : 0} temporary roads created`);
       await Promise.all(deletedRoadIds.map((id) => this.repository.delete(id)));
-      console.log(
-        `${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`
-      );
+      console.log(`${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`);
       await this.updateTempRoads();
     } catch (err) {
       console.error("Failed to batch update temporary roads:", err);

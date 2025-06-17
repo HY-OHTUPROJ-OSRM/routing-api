@@ -30,19 +30,12 @@ zoneRouter.get("/", async (req, res) => {
 
 zoneRouter.post("/diff", async (req, res) => {
   const { added, deleted } = req.body;
-  if (
-    !validateFeatureCollection(
-      { type: "FeatureCollection", features: added },
-      res
-    )
-  )
-    return;
+  if (!validateFeatureCollection({ type: "FeatureCollection", features: added }, res)) return;
 
   // OCC: deleted must be array of {id, updated_at}
   if (!Array.isArray(deleted) || deleted.some((z) => !z.id || !z.updated_at)) {
     return res.status(400).json({
-      message:
-        "Each deleted zone must consist of an id and updated_at for concurrency control.",
+      message: "Each deleted zone must consist of an id and updated_at for concurrency control.",
     });
   }
 
@@ -73,23 +66,14 @@ zoneRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
   const { updated_at } = req.body;
   if (!updated_at) {
-    return res
-      .status(400)
-      .json({ message: "Missing 'updated_at' for concurrency control." });
+    return res.status(400).json({ message: "Missing 'updated_at' for concurrency control." });
   }
   try {
     await zoneService.deleteZone(id, updated_at);
-    res
-      .status(200)
-      .json({ message: `Zone with id ${id} deleted successfully` });
+    res.status(200).json({ message: `Zone with id ${id} deleted successfully` });
   } catch (error) {
     if (error.code === "CONFLICT") {
-      return handleError(
-        res,
-        "Conflict: The resource was modified by another user.",
-        error,
-        409
-      );
+      return handleError(res, "Conflict: The resource was modified by another user.", error, 409);
     }
     handleError(res, "An error occurred while deleting a zone", error);
   }

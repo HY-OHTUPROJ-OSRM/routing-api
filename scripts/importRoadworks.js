@@ -26,12 +26,7 @@ function severityToEffectValue(severity) {
 }
 
 async function roadworkToZone(roadwork) {
-  if (
-    !roadwork.coordinates ||
-    !Array.isArray(roadwork.coordinates) ||
-    roadwork.coordinates.length === 0
-  )
-    return [];
+  if (!roadwork.coordinates || !Array.isArray(roadwork.coordinates) || roadwork.coordinates.length === 0) return [];
 
   // Recursively extract individual lines from possibly nested arrays
   const lines = [];
@@ -47,8 +42,7 @@ async function roadworkToZone(roadwork) {
   if (lines.length === 0) return [];
 
   // Utility for safe property values
-  const safe = (v, fallback = null) =>
-    v === undefined || v === null ? fallback : v;
+  const safe = (v, fallback = null) => (v === undefined || v === null ? fallback : v);
   const baseProps = {
     type: "factor",
     name: safe(roadwork.title, "Roadwork"),
@@ -60,9 +54,7 @@ async function roadworkToZone(roadwork) {
     municipality: safe(roadwork.municipality, ""),
     startTime: safe(roadwork.startTime, null),
     endTime: safe(roadwork.endTime, null),
-    restrictions: Array.isArray(roadwork.restrictions)
-      ? roadwork.restrictions
-      : [],
+    restrictions: Array.isArray(roadwork.restrictions) ? roadwork.restrictions : [],
   };
 
   // Buffer each line to create polygons
@@ -71,16 +63,11 @@ async function roadworkToZone(roadwork) {
     try {
       const line = turf.lineString(coords);
       const buf = turf.buffer(line, 0.008, { units: "kilometers" }); // 8m buffer
-      if (
-        buf &&
-        (buf.geometry.type === "Polygon" ||
-          buf.geometry.type === "MultiPolygon")
-      ) {
+      if (buf && (buf.geometry.type === "Polygon" || buf.geometry.type === "MultiPolygon")) {
         // Clone base props and add part-specific title
         const props = { ...baseProps };
         const baseTitle = safe(roadwork.title, "Roadwork");
-        const partTitle =
-          lines.length > 1 ? `${baseTitle} (${idx + 1})` : baseTitle;
+        const partTitle = lines.length > 1 ? `${baseTitle} (${idx + 1})` : baseTitle;
         // assign both title and name so downstream consumers see the counter
         props.title = partTitle;
         props.name = partTitle;
@@ -130,17 +117,13 @@ async function importRoadworks() {
     }
 
     // Filter roadworks to only those where all pairs of coordinates are within 3km
-    roadworks = roadworks.filter(rw => {
+    roadworks = roadworks.filter((rw) => {
       if (!rw.coordinates || !Array.isArray(rw.coordinates) || rw.coordinates.length === 0) return false;
       const allCoords = [];
       extractAllCoords(rw.coordinates, allCoords);
       for (let i = 0; i < allCoords.length; i++) {
         for (let j = i + 1; j < allCoords.length; j++) {
-          const dist = turf.distance(
-            turf.point(allCoords[i]),
-            turf.point(allCoords[j]),
-            { units: "kilometers" }
-          );
+          const dist = turf.distance(turf.point(allCoords[i]), turf.point(allCoords[j]), { units: "kilometers" });
           if (dist > 3) return false;
         }
       }
@@ -149,12 +132,7 @@ async function importRoadworks() {
 
     const zones = [];
     for (const rw of roadworks) {
-      if (
-        !rw.coordinates ||
-        !Array.isArray(rw.coordinates) ||
-        rw.coordinates.length === 0
-      )
-        continue;
+      if (!rw.coordinates || !Array.isArray(rw.coordinates) || rw.coordinates.length === 0) continue;
 
       const features = await roadworkToZone(rw);
       if (features && features.length) zones.push(...features);
@@ -163,9 +141,7 @@ async function importRoadworks() {
     const digitrafficZones = await getPreviousDigitrafficZones();
     const zoneService = new ZoneService();
     await zoneService.updateZones(zones, digitrafficZones);
-    console.log(
-      `Deleted ${digitrafficZones.length} previous digitraffic zones.`
-    );
+    console.log(`Deleted ${digitrafficZones.length} previous digitraffic zones.`);
     console.log(`Imported ${zones.length} roadwork zones.`);
   } catch (err) {
     console.error("Error importing roadworks:", err);

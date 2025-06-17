@@ -16,7 +16,7 @@
  */
 function combineOSRMResponses(resp1, resp2, tempRoadStartCoord, tempRoadEndCoord, connectingRoad) {
   // Validate both responses contain usable routes
-  if (resp1.code !== 'Ok' || resp2.code !== 'Ok' || !resp1.routes.length || !resp2.routes.length) {
+  if (resp1.code !== "Ok" || resp2.code !== "Ok" || !resp1.routes.length || !resp2.routes.length) {
     console.error("Cannot combine responses, one or both legs failed.", { code1: resp1.code, code2: resp2.code });
     return null;
   }
@@ -30,49 +30,52 @@ function combineOSRMResponses(resp1, resp2, tempRoadStartCoord, tempRoadEndCoord
   let connectingDistance = 0;
   let connectingDuration = 0;
   let connectingGeometry = {
-    type: 'LineString',
+    type: "LineString",
     coordinates: [
       [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
       [tempRoadEndCoord.lng, tempRoadEndCoord.lat],
     ],
   };
-  if (connectingRoad && typeof connectingRoad.distance === 'number' && typeof connectingRoad.speed === 'number') {
+  if (connectingRoad && typeof connectingRoad.distance === "number" && typeof connectingRoad.speed === "number") {
     connectingDistance = connectingRoad.distance * 1000; // convert km to meters
     connectingDuration = (connectingRoad.distance / connectingRoad.speed) * 3600; // hours to seconds
-    if (connectingRoad.geometry && connectingRoad.geometry.type === 'LineString' && Array.isArray(connectingRoad.geometry.coordinates) && connectingRoad.geometry.coordinates.length >= 2) {
+    if (
+      connectingRoad.geometry &&
+      connectingRoad.geometry.type === "LineString" &&
+      Array.isArray(connectingRoad.geometry.coordinates) &&
+      connectingRoad.geometry.coordinates.length >= 2
+    ) {
       connectingGeometry = connectingRoad.geometry;
     }
   }
   const middleStep = {
-    intersections: [{
-      out: 0,
-      entry: [true],
-      bearings: [0],
-      location: [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
-    }],
-    driving_side: 'right',
+    intersections: [
+      {
+        out: 0,
+        entry: [true],
+        bearings: [0],
+        location: [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
+      },
+    ],
+    driving_side: "right",
     geometry: connectingGeometry,
     maneuver: {
       // Maneuver at the start of the connecting road
       location: [tempRoadStartCoord.lng, tempRoadStartCoord.lat],
       bearing_before: leg1.steps[leg1.steps.length - 2]?.maneuver.bearing_after || 0,
       bearing_after: leg2.steps[1]?.maneuver.bearing_before || 0,
-      type: 'continue',
-      modifier: 'straight',
+      type: "continue",
+      modifier: "straight",
     },
-    name: 'Connecting Road',
-    mode: 'driving',
+    name: "Connecting Road",
+    mode: "driving",
     weight: 0,
     duration: connectingDuration,
     distance: connectingDistance,
   };
 
   // Combine steps: all but last from leg1, the middle step, all but first from leg2
-  const combinedSteps = [
-    ...leg1.steps.slice(0, -1),
-    middleStep,
-    ...leg2.steps.slice(1),
-  ];
+  const combinedSteps = [...leg1.steps.slice(0, -1), middleStep, ...leg2.steps.slice(1)];
 
   // Clone the first response to use as a template for the combined result
   const combinedResponse = JSON.parse(JSON.stringify(resp1));
@@ -92,12 +95,9 @@ function combineOSRMResponses(resp1, resp2, tempRoadStartCoord, tempRoadEndCoord
 
   // Replace steps with the combined steps
   combinedLeg.steps = combinedSteps;
-  
+
   // Set waypoints to original start and final destination
-  combinedResponse.waypoints = [
-      resp1.waypoints[0],
-      resp2.waypoints[1],
-  ];
+  combinedResponse.waypoints = [resp1.waypoints[0], resp2.waypoints[1]];
 
   return combinedResponse;
 }

@@ -115,9 +115,7 @@ describe("TempRoadService - Unit Tests", () => {
 
   test("updateTempRoad throws when road does not exist", async () => {
     mockRepo.getById.mockResolvedValue(null);
-    await expect(service.updateTempRoad(123, { speed: 10 })).rejects.toThrow(
-      /does not exist/
-    );
+    await expect(service.updateTempRoad(123, { speed: 10 })).rejects.toThrow(/does not exist/);
   });
 
   test("updateTempRoads builds correct CSV and calls writeCSV once", async () => {
@@ -148,9 +146,7 @@ describe("TempRoadService - Unit Tests", () => {
   test("batchUpdateTempRoads creates, deletes and refreshes activeTempRoads", async () => {
     mockRepo.create.mockResolvedValue({});
     mockRepo.delete.mockResolvedValue();
-    const updateSpy = jest
-      .spyOn(service, "updateTempRoads")
-      .mockResolvedValue();
+    const updateSpy = jest.spyOn(service, "updateTempRoads").mockResolvedValue();
 
     const newRoads = [{ id: 3 }, { id: 4 }];
     const deletedIds = [5, 6];

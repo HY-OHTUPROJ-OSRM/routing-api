@@ -29,9 +29,9 @@ class NodeService {
       nodeId: nearestNode.id,
       coordinates: {
         lat: nearestNode.lat / 10000000,
-        lng: nearestNode.lon / 10000000
+        lng: nearestNode.lon / 10000000,
       },
-      distance: parseFloat(nearestNode.distance)
+      distance: parseFloat(nearestNode.distance),
     };
   }
 
@@ -50,7 +50,7 @@ class NodeService {
     return {
       id: node.id,
       lat: node.lat / 10000000,
-      lng: node.lon / 10000000
+      lng: node.lon / 10000000,
     };
   }
 }

@@ -17,7 +17,6 @@ async function getWayList() {
 }
 
 nodelistRouter.get("/", async (req, res) => {
-
   try {
     const nodes = await getNodeList();
     const ways = await getWayList();

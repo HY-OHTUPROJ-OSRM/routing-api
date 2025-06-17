@@ -1,11 +1,9 @@
 const STATIONS_URL = "https://tie.digitraffic.fi/api/tms/v1/stations";
 
-const DATA_URL = (id) =>
-  `https://tie.digitraffic.fi/api/tms/v1/stations/${id}/data`;
+const DATA_URL = (id) => `https://tie.digitraffic.fi/api/tms/v1/stations/${id}/data`;
 
 const ROAD_WORKS_URL =
   "https://tie.digitraffic.fi/api/traffic-message/v1/messages?inactiveHours=0&includeAreaGeometry=false&situationType=ROAD_WORK";
-
 
 class DigitrafficService {
   static async fetchStations() {
@@ -29,17 +27,13 @@ class DigitrafficService {
     }));
   }
 
-    static async fetchHelsinkiStations() {
+  static async fetchHelsinkiStations() {
     const all = await this.fetchStations();
     return all.filter(({ coordinates }) => {
-        const [lon, lat] = coordinates;
-        return (
-        lat >= 60.15 && lat <= 60.30 &&
-        lon >= 24.80 && lon <= 25.10
-        );
+      const [lon, lat] = coordinates;
+      return lat >= 60.15 && lat <= 60.3 && lon >= 24.8 && lon <= 25.1;
     });
-    }
-
+  }
 
   static async fetchVolumeForStation(stationId) {
     const res = await fetch(DATA_URL(stationId), {
@@ -55,25 +49,25 @@ class DigitrafficService {
 
     return await res.json();
   }
-/**
- * Fetches and filters road work data from Digitraffic API.
- *
- * Keeps only essential fields for each road work feature:
- * - id: situationId
- * - title: from announcements[0]
- * - roadName: from primaryPoint.roadName
- * - municipality: from primaryPoint.municipality
- * - startTime, endTime: from timeAndDuration
- * - severity: from first roadWorkPhase
- * - restrictions: type, name, quantity, unit (if available)
- * - coordinates: geometry.coordinates (for mapping)
- *
- * Filters out:
- * - Raw geometry type and metadata
- * - Multiple announcements and phases (uses first only)
- * - Nested contact info, location tables, working hours, etc.
- * - Sender, versioning, and unused descriptive fields
- */
+  /**
+   * Fetches and filters road work data from Digitraffic API.
+   *
+   * Keeps only essential fields for each road work feature:
+   * - id: situationId
+   * - title: from announcements[0]
+   * - roadName: from primaryPoint.roadName
+   * - municipality: from primaryPoint.municipality
+   * - startTime, endTime: from timeAndDuration
+   * - severity: from first roadWorkPhase
+   * - restrictions: type, name, quantity, unit (if available)
+   * - coordinates: geometry.coordinates (for mapping)
+   *
+   * Filters out:
+   * - Raw geometry type and metadata
+   * - Multiple announcements and phases (uses first only)
+   * - Nested contact info, location tables, working hours, etc.
+   * - Sender, versioning, and unused descriptive fields
+   */
   static async fetchRoadWorks() {
     const res = await fetch(ROAD_WORKS_URL, {
       headers: { "Accept-Encoding": "gzip" },
@@ -98,7 +92,7 @@ class DigitrafficService {
         startTime: announcement?.timeAndDuration?.startTime,
         endTime: announcement?.timeAndDuration?.endTime,
         severity: phase?.severity,
-        restrictions: phase?.restrictions?.map(r => ({
+        restrictions: phase?.restrictions?.map((r) => ({
           type: r.type,
           name: r.restriction?.name,
           value: r.restriction?.quantity,

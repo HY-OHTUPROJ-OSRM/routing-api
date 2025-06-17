@@ -43,7 +43,6 @@ tempsRouter.get("/:id", async (req, res) => {
 });
 
 // Update metadata of a temporary road
-// Require updated_at for optimistic concurrency
 tempsRouter.patch("/:id", async (req, res) => {
   try {
     if (!req.body.updated_at) {
@@ -53,7 +52,9 @@ tempsRouter.patch("/:id", async (req, res) => {
     res.json(updated);
   } catch (error) {
     if (error.code === "CONFLICT") {
-      return res.status(409).json({ message: "Conflict: The resource was modified by another user.", error: error.message });
+      return res
+        .status(409)
+        .json({ message: "Conflict: The resource was modified by another user.", error: error.message });
     }
     handleError(res, "Error updating temp", error);
   }

@@ -5,21 +5,14 @@ const server = require("./server");
 const { spawn } = require("child_process");
 const ZoneService = require("./services/ZoneService");
 const TempRoadService = require("./services/TempRoadService");
-const {
-  formatOutput,
-  execSyncCustom,
-  makeOutputReader,
-} = require("./utils/process_utils");
+const { formatOutput, execSyncCustom, makeOutputReader } = require("./utils/process_utils");
 const { fetchDisconnectedLinks } = require("./routes/disconnected_links");
 
 // Prepare OSRM data
 function prepareOsrmData() {
   const drop = true;
   execSyncCustom("create_database.sh", "./create_database.sh" + (drop ? " --drop" : ""));
-  execSyncCustom(
-    "osrm-extract",
-    `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
-  );
+  execSyncCustom("osrm-extract", `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`);
   execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
   execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
   fetchDisconnectedLinks();
@@ -51,10 +44,7 @@ function startOsrmBackend() {
 
   osrm.stdout.on("data", (output) => {
     process.stdout.write(formatOutput("osrm-routed", output));
-    if (
-      !started &&
-      output.toString().includes("running and waiting for requests")
-    ) {
+    if (!started && output.toString().includes("running and waiting for requests")) {
       startServer();
       started = true;
     }

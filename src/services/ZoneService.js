@@ -6,8 +6,6 @@ const calculateSegmentSpeeds = require("../utils/segment_speeds");
 const { makeOutputReader } = require("../utils/process_utils");
 const { ROUTE_DATA_PATH } = require("../utils/config");
 
-const SEGMENT_SPEED_CSV_PATH = "/tmp/routing-api-segments.csv";
-
 // All modifications to this must be atomic at the level of JS execution!
 
 class ZoneService {
@@ -154,7 +152,7 @@ class ZoneService {
   }
 
   async writeCSV(csv) {
-    const filename = SEGMENT_SPEED_CSV_PATH;
+    const filename = "/tmp/routing-api-segments.csv";
     const file = await open(filename, "w");
     await file.write(csv);
     await file.close();

@@ -19,11 +19,7 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
     const end = { lat: endLat, lng: endLng };
 
     // Calculate distance between start and end (in kilometers)
-    const startEndDistanceKm = turf.distance(
-      [start.lng, start.lat],
-      [end.lng, end.lat],
-      { units: "kilometers" }
-    );
+    const startEndDistanceKm = turf.distance([start.lng, start.lat], [end.lng, end.lat], { units: "kilometers" });
 
     // Calculate leeway as 20% of route distance or 10km minimum to allow for temp road proximity
     const leewayKm = Math.max(0.2 * startEndDistanceKm, 10);
@@ -40,7 +36,7 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
         road.geom.coordinates.length < 2
       ) {
         console.error(
-          `Temp road missing valid LineString geometry: id=${road.id || 'unknown'}, name=${road.name || 'unknown'}`
+          `Temp road missing valid LineString geometry: id=${road.id || "unknown"}, name=${road.name || "unknown"}`
         );
         continue;
       }
@@ -78,16 +74,12 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
       const startNodeCoord = tempRoad._startCoord;
       const endNodeCoord = tempRoad._endCoord;
       // Determine which temp road node is closer to the user's start coordinate
-      const distToStartNode = turf.distance(
-        [start.lng, start.lat],
-        [startNodeCoord.lng, startNodeCoord.lat],
-        { units: "kilometers" }
-      );
-      const distToEndNode = turf.distance(
-        [start.lng, start.lat],
-        [endNodeCoord.lng, endNodeCoord.lat],
-        { units: "kilometers" }
-      );
+      const distToStartNode = turf.distance([start.lng, start.lat], [startNodeCoord.lng, startNodeCoord.lat], {
+        units: "kilometers",
+      });
+      const distToEndNode = turf.distance([start.lng, start.lat], [endNodeCoord.lng, endNodeCoord.lat], {
+        units: "kilometers",
+      });
       let entryCoord, exitCoord;
       if (distToStartNode <= distToEndNode) {
         entryCoord = startNodeCoord;
@@ -103,10 +95,7 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
       const url2 = `${BACKEND_URL}/route/v1/driving/${tempExitCoord};${origEnd}${urlObj.search}`;
       let resp1, resp2;
       try {
-        [resp1, resp2] = await Promise.all([
-          fetch(url1).then((r) => r.json()),
-          fetch(url2).then((r) => r.json()),
-        ]);
+        [resp1, resp2] = await Promise.all([fetch(url1).then((r) => r.json()), fetch(url2).then((r) => r.json())]);
       } catch (e) {
         console.error("Error fetching temp road segments:", e);
         // If fetching temp road segments fails, fall back to normal route
@@ -121,10 +110,7 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
       ) {
         const coords = connectingGeometry.coordinates;
         // If entryCoord does not match the first coordinate, reverse the geometry
-        if (
-          coords.length >= 2 &&
-          (coords[0][0] !== entryCoord.lng || coords[0][1] !== entryCoord.lat)
-        ) {
+        if (coords.length >= 2 && (coords[0][0] !== entryCoord.lng || coords[0][1] !== entryCoord.lat)) {
           connectingGeometry = {
             type: "LineString",
             coordinates: [...coords].reverse(),
@@ -137,23 +123,13 @@ router.use("/v1/driving/:startCoord;:endCoord", async (req, res, next) => {
         speed: tempRoad.speed,
         geometry: connectingGeometry,
       };
-      const combined = combineOSRMResponses(
-        resp1,
-        resp2,
-        entryCoord,
-        exitCoord,
-        connectingRoad
-      );
+      const combined = combineOSRMResponses(resp1, resp2, entryCoord, exitCoord, connectingRoad);
 
       // Return the faster route (combined with temp road or normal)
       const combinedDuration =
-        combined && combined.routes && combined.routes[0]
-          ? combined.routes[0].duration
-          : Infinity;
+        combined && combined.routes && combined.routes[0] ? combined.routes[0].duration : Infinity;
       const normalDuration =
-        normalResp && normalResp.routes && normalResp.routes[0]
-          ? normalResp.routes[0].duration
-          : Infinity;
+        normalResp && normalResp.routes && normalResp.routes[0] ? normalResp.routes[0].duration : Infinity;
       if (combined && combinedDuration < normalDuration) {
         return res.json(combined);
       } else {

@@ -33,10 +33,10 @@ function binaryWriter(stream) {
     },
     writeString: (str) => {
       const lengthBuffer = Buffer.alloc(4);
-      lengthBuffer.writeUInt32LE(Buffer.byteLength(str, 'utf8'), 0);
+      lengthBuffer.writeUInt32LE(Buffer.byteLength(str, "utf8"), 0);
       stream.write(lengthBuffer);
-      stream.write(str, 'utf8');
-    }
+      stream.write(str, "utf8");
+    },
   };
 }
 module.exports = binaryWriter;

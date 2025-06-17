@@ -1,15 +1,9 @@
 const { spawn } = require("child_process");
 const binaryWriter = require("./binary_writer");
 
-async function calculateSegmentSpeeds(
-  roadblockPolygons,
-  roadblockPolylines,
-  speedzonePolygons,
-  paths
-) {
+async function calculateSegmentSpeeds(roadblockPolygons, roadblockPolylines, speedzonePolygons, paths) {
   const child = spawn("Polygonal-Intersections-CLI");
-  const { writeUInt8, writeUInt16, writeUInt64, writeDouble, writeVertex } =
-    binaryWriter(child.stdin);
+  const { writeUInt8, writeUInt16, writeUInt64, writeDouble, writeVertex } = binaryWriter(child.stdin);
   const resultSegments = new Map();
 
   const result = new Promise((resolve, reject) => {
@@ -27,11 +21,7 @@ async function calculateSegmentSpeeds(
   child.stdout.on("readable", () => {
     const size = 3 * 8;
 
-    for (
-      let to_read = child.stdout.readableLength;
-      to_read >= size;
-      to_read -= size
-    ) {
+    for (let to_read = child.stdout.readableLength; to_read >= size; to_read -= size) {
       let buffer = child.stdout.read(size);
       if (buffer === null) break;
 
