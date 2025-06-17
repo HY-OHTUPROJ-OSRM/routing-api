@@ -85,7 +85,7 @@ class TempRoadRepository {
     }
   }
 
-  async update(id, updates) {
+  async update(id, updates, expectedUpdatedAt) {
     if (!updates || Object.keys(updates).length === 0) {
       throw new Error("No fields to update");
     }
@@ -126,13 +126,14 @@ class TempRoadRepository {
 
     setClauses.push(`updated_at = NOW()`);
     values.push(id);
+    values.push(expectedUpdatedAt);
 
     const query = `
       UPDATE temporary_routes
       SET
         ${setClauses.join(",\n        ")}
       WHERE
-        id = $${idx}
+        id = $${idx} AND updated_at = $${idx + 1}
       RETURNING
         id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
         length, speed, max_weight, max_height, description, created_at, updated_at;

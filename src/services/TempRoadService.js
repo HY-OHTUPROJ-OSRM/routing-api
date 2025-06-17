@@ -93,7 +93,7 @@ class TempRoadService {
     }
   }
 
-  async updateTempRoad(id, updates) {
+  async updateTempRoad(id, updates, expectedUpdatedAt) {
     try {
       const existing = await this.repository.getById(id);
       if (!existing) {
@@ -101,12 +101,18 @@ class TempRoadService {
       }
       // (!) Convert start_node/end_node to geom if needed
       await legacyNodeToGeom(updates);
-      const updated = await this.repository.update(id, updates);
+      const updated = await this.repository.update(id, updates, expectedUpdatedAt);
+      if (!updated) {
+        const err = new Error("Conflict: The resource was modified by another user.");
+        err.code = "CONFLICT";
+        throw err;
+      }
       console.log(`Temporary road with ID ${id} updated`);
       await this.updateTempRoads();
       // (!) Add start_node/end_node for response
       return legacyGeomToNode(updated);
     } catch (err) {
+      if (err.code === "CONFLICT") throw err;
       console.error(`Failed to update temporary road with ID ${id}:`, err);
       throw err;
     }
