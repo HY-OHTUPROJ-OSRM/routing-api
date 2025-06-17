@@ -100,14 +100,15 @@ async function roadworkToZone(roadwork) {
 
 /**
  * Deletes all previously imported Digitraffic roadwork zones from the database.
+ * Returns array of {id, updated_at}
  */
-async function getPreviousDigitrafficZoneIds() {
+async function getPreviousDigitrafficZones() {
   const zoneService = new ZoneService();
   const allZones = await zoneService.getZones();
   return allZones.features
     .filter((z) => z.properties && z.properties.source === "digitraffic")
-    .map((z) => z.properties.id)
-    .filter((id) => id !== undefined && id !== null);
+    .map((z) => ({ id: z.properties.id, updated_at: z.properties.updated_at }))
+    .filter((z) => z.id !== undefined && z.id !== null && z.updated_at);
 }
 
 /**
@@ -159,11 +160,11 @@ async function importRoadworks() {
       if (features && features.length) zones.push(...features);
     }
 
-    const digitrafficZoneIds = await getPreviousDigitrafficZoneIds();
+    const digitrafficZones = await getPreviousDigitrafficZones();
     const zoneService = new ZoneService();
-    await zoneService.updateZones(zones, digitrafficZoneIds);
+    await zoneService.updateZones(zones, digitrafficZones);
     console.log(
-      `Deleted ${digitrafficZoneIds.length} previous digitraffic zones.`
+      `Deleted ${digitrafficZones.length} previous digitraffic zones.`
     );
     console.log(`Imported ${zones.length} roadwork zones.`);
   } catch (err) {
