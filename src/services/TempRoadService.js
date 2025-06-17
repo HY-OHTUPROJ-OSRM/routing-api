@@ -1,8 +1,4 @@
-const { spawn } = require("child_process");
-const { open, unlink } = require("fs").promises;
 const TempRoadRepository = require("../repositories/TempRoadRepository");
-const { makeOutputReader } = require("../utils/process_utils");
-const { ROUTE_DATA_PATH } = require("../utils/config");
 const NodeService = require("./NodeService");
 const nodeService = new NodeService();
 
@@ -151,79 +147,10 @@ class TempRoadService {
       console.log(` done - found ${activeRoads.length} active roads`);
 
       TempRoadService.activeTempRoads = activeRoads;
-
-      // Generate the CSV data for OSRM
-      let lines = [];
-
-      // Process all active temporary roads
-      for (const road of activeRoads) {
-        // (!) Use geometry endpoints to get node ids for OSRM CSV
-        if (road.geom && road.geom.type === "LineString" && Array.isArray(road.geom.coordinates)) {
-          const coords = road.geom.coordinates;
-          if (coords.length >= 2) {
-            const startNode = await nodeService.getNearestNode(coords[0][1], coords[0][0]);
-            const endNode = await nodeService.getNearestNode(
-              coords[coords.length - 1][1],
-              coords[coords.length - 1][0]
-            );
-            if (startNode && endNode) {
-              const speed = road.speed;
-              lines.push(`${startNode.nodeId},${endNode.nodeId},${speed}`);
-              lines.push(`${endNode.nodeId},${startNode.nodeId},${speed}`);
-            }
-          }
-        }
-      }
-
-      if (lines.length > 0) {
-        await TempRoadService.writeCSV(lines.join("\n"));
-      } else {
-        console.log("No active temporary roads found, skipping OSRM update");
-      }
     } catch (err) {
       console.error("Failed to update temporary roads:", err);
       throw err;
     }
-  }
-
-  static async writeCSV(csv) {
-    const filename = "/tmp/routing-api-temp-roads.csv";
-    const file = await open(filename, "w");
-    await file.write(csv);
-    await file.close();
-
-    console.log("Wrote temporary roads CSV file");
-
-    const contract = spawn("osrm-contract", ["--segment-speed-file", filename, ROUTE_DATA_PATH]);
-
-    contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout));
-    contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr));
-
-    return new Promise((resolve, reject) => {
-      contract.on("exit", (code, signal) => {
-        unlink(filename);
-
-        if (code != 0) {
-          reject(new Error("osrm-contract failed"));
-          return;
-        }
-
-        const datastore = spawn("osrm-datastore", [ROUTE_DATA_PATH]);
-
-        datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout));
-        datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr));
-
-        datastore.on("exit", (code, signal) => {
-          if (code != 0) {
-            reject(new Error("osrm-datastore failed"));
-            return;
-          }
-
-          console.log("Successfully updated routing data with temporary roads");
-          resolve();
-        });
-      });
-    });
   }
 
   async batchUpdateTempRoads(newRoads, deletedRoadIds) {
