@@ -6,7 +6,8 @@ const { spawn } = require("child_process");
 const ZoneService = require("./services/ZoneService");
 const TempRoadService = require("./services/TempRoadService");
 const { formatOutput, execSyncCustom, makeOutputReader } = require("./utils/process_utils");
-const { fetchDisconnectedLinks } = require("./routes/disconnected_links");
+const DisconnectionsService = require("./services/DisconnectionsService");
+const disconnectionsService = new DisconnectionsService();
 
 // Prepare OSRM data
 function prepareOsrmData() {
@@ -15,7 +16,7 @@ function prepareOsrmData() {
   execSyncCustom("osrm-extract", `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`);
   execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
   execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
-  fetchDisconnectedLinks();
+  disconnectionsService.fetchDisconnections();
 }
 
 // Start Express server after services are initialized
