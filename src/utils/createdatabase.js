@@ -1,25 +1,16 @@
-#!/bin/bash
-set -euo pipefail
+const { execSyncCustom } = require("./process_utils");
+const sql = require("./database");
+const {
+    DATABASE_HOST,
+    DATABASE_PORT,
+    DATABASE_DB,
+    DATABASE_USER,
+    DATABASE_PASSWORD,
+    ROUTE_DATA_PATH,
+} = require("./config");
+const axios = require("axios");
 
-drop_all=false
-for arg in "$@"; do
-  if [ "$arg" = "--drop" ]; then
-    drop_all=true
-    break
-  fi
-done
-
-if [ "$drop_all" = true ]; then
-  echo "Dropping all existing tables..."
-  PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" <<EOSQL
-DROP TABLE IF EXISTS disconnected_links CASCADE;
-DROP TABLE IF EXISTS temporary_routes CASCADE;
-DROP TABLE IF EXISTS zones CASCADE;
-DROP TABLE IF EXISTS municipalities CASCADE;
-EOSQL
-fi
-
-create_sql="
+const create_sql = `
 CREATE TABLE IF NOT EXISTS zones (
     id SERIAL PRIMARY KEY,
     type TEXT,
@@ -79,12 +70,9 @@ CREATE TABLE IF NOT EXISTS disconnected_links (
 CREATE INDEX IF NOT EXISTS idx_disc_links_start_node ON disconnected_links(start_node);
 CREATE INDEX IF NOT EXISTS idx_disc_links_end_node   ON disconnected_links(end_node);
 CREATE INDEX IF NOT EXISTS sidx_zones_geom ON zones USING GIST(geom);
-"
+`;
 
-PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -c "$create_sql"
-
-# ALTER TABLE to add missing columns if necessary
-alter_sql="
+alter_sql=`
 DO \$\$
 BEGIN
   -- temporary_routes.direction
@@ -120,35 +108,65 @@ BEGIN
   END IF;
 END
 \$\$;
-"
-PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -c "$alter_sql"
+`;
 
-# Check if planet_osm_line table exists (osm2pgsql loaded)
-table_exists=$(PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -t -c \
-"SELECT to_regclass('public.planet_osm_line');" | tr -d '[:space:]')
+module.exports = async function () {
+    console.log("Initializing database...");
 
-if [ -z "$table_exists" ] || [ "$table_exists" = "null" ]; then
-    echo "Creating database schema with osm2pgsql..."
-    PGPASSWORD=$DATABASE_PASSWORD osm2pgsql --slim -H "$DATABASE_HOST" -P "$DATABASE_PORT" -U "$DATABASE_USER" \
-        "${ROUTE_DATA_PATH:-./map_data/route-data.osm.pbf}"
-else
-    echo "Database schema already exists. Skipping osm2pgsql."
-fi
+    console.log("Moving route data to database...");
+    execSyncCustom(
+        "osm2pgsql",
+        `osm2pgsql --slim -H "${DATABASE_HOST}" -P "${DATABASE_PORT}" -U "${DATABASE_USER}" "${ROUTE_DATA_PATH}"`,
+        {
+            env: {
+                PGPASSWORD: DATABASE_PASSWORD,
+            },
+        });
 
-# Load municipalities data if missing
-echo "Checking if municipalities table is empty..."
-row_count=$(PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -t -c "SELECT COUNT(*) FROM municipalities;" | tr -d '[:space:]')
-echo "Row count in municipalities table: $row_count"
+    console.log("Creating tables if they do not exist...");
+    const res = await sql.unsafe(create_sql);
+    console.log("Database initialized:", res);
 
-if [ "$row_count" -eq 0 ]; then
-    echo "Inserting municipalities data into the database..."
-    json=$(curl -s "https://data.stat.fi/api/classifications/v2/classifications/kunta_1_20250101/classificationItems?content=data&meta=max&lang=fi&format=json")
+    const res4 = await sql.unsafe(alter_sql);
+    console.log("Database altered:", res4);
 
-    echo "$json" | jq -c '.[] | {code: .code, name: .classificationItemNames[0].name}' | while read -r item; do
-        code=$(echo "$item" | jq -r '.code')
-        name=$(echo "$item" | jq -r '.name' | sed "s/'/''/g")
-        PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" \
-            -c "INSERT INTO municipalities (code, name) VALUES ('$code', '$name') ON CONFLICT (code) DO NOTHING;" \
-            >/dev/null 2>&1
-    done
-fi
+    console.log("Checking if municipalities table is empty...");
+    const [{ count }] = await sql`SELECT COUNT(*)::int FROM municipalities`;
+    console.log(`Row count in municipalities table: ${count}`);
+    if (count === 0) {
+        console.log("Inserting municipalities data into the database...");
+
+        const url = "https://data.stat.fi/api/classifications/v2/classifications/kunta_1_20250101/classificationItems?content=data&meta=max&lang=fi&format=json";
+        const response = await axios.get(url);
+        const items = response.data;
+
+        for (const item of items) {
+            const code = item.code;
+            const name = item.classificationItemNames?.[0]?.name || "";
+
+            try {
+                await sql`
+          INSERT INTO municipalities (code, name)
+          VALUES (${code}, ${name})
+          ON CONFLICT (code) DO NOTHING
+        `;
+            } catch (err) {
+                console.error(`Failed to insert ${code} - ${name}:`, err.message);
+            }
+        }
+
+        console.log("Finished inserting municipalities.");
+    } else {
+        console.log("Municipalities table already has data. Skipping insert.");
+    }
+
+    console.log("Extracting OSRM data...");
+    execSyncCustom(
+        "osrm-extract",
+        `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
+    );
+    console.log("Contracting OSRM data...");
+    execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
+    console.log("Storing OSRM data...");
+    execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
+}
