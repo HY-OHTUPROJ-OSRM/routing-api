@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS temporary_routes (
     name TEXT,
     status BOOLEAN DEFAULT true,
     tags JSONB DEFAULT '[]',
-    geom GEOMETRY(LINESTRING, 3857) CHECK (ST_IsValid(geom)),
+    geom GEOMETRY(LINESTRING, 4326) CHECK (ST_IsValid(geom)),
     length DOUBLE PRECISION,
     speed INTEGER,
     max_weight DOUBLE PRECISION,
