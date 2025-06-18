@@ -92,7 +92,7 @@ table_exists=$(PGPASSWORD=$DATABASE_PASSWORD psql -h "$DATABASE_HOST" -p "$DATAB
 if [ "$table_exists" = "" ] || [ "$table_exists" = "null" ]; then
     echo "Creating database schema..."
     PGPASSWORD=$DATABASE_PASSWORD osm2pgsql --slim -H "$DATABASE_HOST" -P "$DATABASE_PORT" -U "$DATABASE_USER" \
-        "${ROUTE_DATA_PATH:-./map_data/route-data.osm}"
+        "${ROUTE_DATA_PATH:-./map_data/route-data.osm.pbf}"
 else
     echo "Database schema already exists. Skipping osm2pgsql."
 fi
