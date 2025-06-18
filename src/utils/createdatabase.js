@@ -1,14 +1,15 @@
 const { execSyncCustom } = require("./process_utils");
 const sql = require("./database");
 const {
-    DATABASE_HOST,
-    DATABASE_PORT,
-    DATABASE_DB,
-    DATABASE_USER,
-    DATABASE_PASSWORD,
-    ROUTE_DATA_PATH,
+  DATABASE_HOST,
+  DATABASE_PORT,
+  DATABASE_DB,
+  DATABASE_USER,
+  DATABASE_PASSWORD,
+  ROUTE_DATA_PATH,
 } = require("./config");
 const axios = require("axios");
+const crypto = require('crypto');
 
 const create_sql = `
 CREATE TABLE IF NOT EXISTS zones (
@@ -72,101 +73,89 @@ CREATE INDEX IF NOT EXISTS idx_disc_links_end_node   ON disconnected_links(end_n
 CREATE INDEX IF NOT EXISTS sidx_zones_geom ON zones USING GIST(geom);
 `;
 
-alter_sql=`
-DO \$\$
-BEGIN
-  -- temporary_routes.direction
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'temporary_routes' AND column_name = 'direction'
-  ) THEN
-    ALTER TABLE temporary_routes ADD COLUMN direction INTEGER DEFAULT 2;
-  END IF;
-
-  -- temporary_routes.tags
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'temporary_routes' AND column_name = 'tags'
-  ) THEN
-    ALTER TABLE temporary_routes ADD COLUMN tags JSONB DEFAULT '[]';
-  END IF;
-
-  -- temporary_routes.geom
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'temporary_routes' AND column_name = 'geom'
-  ) THEN
-    ALTER TABLE temporary_routes ADD COLUMN geom GEOMETRY(LINESTRING, 3857);
-  END IF;
-
-  -- zones.geom
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'zones' AND column_name = 'geom'
-  ) THEN
-    ALTER TABLE zones ADD COLUMN geom GEOMETRY(POLYGON, 3857);
-  END IF;
-END
-\$\$;
+const drop_sql = `
+DROP TABLE IF EXISTS zones, municipalities, temporary_routes, disconnected_links;
 `;
 
+async function createTable() {
+  await sql`
+  CREATE TABLE IF NOT EXISTS db_version (
+    name TEXT PRIMARY KEY,
+    version TEXT NOT NULL
+  );
+  `;
+
+  const hash = crypto
+    .createHash('sha256')
+    .update(create_sql)
+    .digest('hex')
+
+  const res = await sql`SELECT version FROM db_version WHERE name='id';`;
+  if (res.length > 0) {
+    if (res[0].version !== hash) {
+      console.log("Dropping old tables");
+      await sql.unsafe(drop_sql);
+      await sql`UPDATE db_version SET version = ${hash} WHERE name = 'id';`;
+    }
+  } else {
+    await sql`INSERT INTO db_version (name, version) VALUES ('id', ${hash});`;
+  }
+
+  await sql.unsafe(create_sql);
+}
+
 module.exports = async function () {
-    console.log("Initializing database...");
+  console.log("Initializing database...");
 
-    console.log("Moving route data to database...");
-    execSyncCustom(
-        "osm2pgsql",
-        `osm2pgsql --slim -H "${DATABASE_HOST}" -P "${DATABASE_PORT}" -U "${DATABASE_USER}" "${ROUTE_DATA_PATH}"`,
-        {
-            env: {
-                PGPASSWORD: DATABASE_PASSWORD,
-            },
-        });
+  await createTable();
 
-    console.log("Creating tables if they do not exist...");
-    const res = await sql.unsafe(create_sql);
-    console.log("Database initialized:", res);
+  console.log("Moving route data to database...");
+  execSyncCustom(
+    "osm2pgsql",
+    `osm2pgsql --slim -H "${DATABASE_HOST}" -P "${DATABASE_PORT}" -U "${DATABASE_USER}" "${ROUTE_DATA_PATH}"`,
+    {
+      env: {
+        PGPASSWORD: DATABASE_PASSWORD,
+      },
+    });
 
-    const res4 = await sql.unsafe(alter_sql);
-    console.log("Database altered:", res4);
+  console.log("Checking if municipalities table is empty...");
+  const [{ count }] = await sql`SELECT COUNT(*)::int FROM municipalities`;
+  console.log(`Row count in municipalities table: ${count}`);
+  if (count === 0) {
+    console.log("Inserting municipalities data into the database...");
 
-    console.log("Checking if municipalities table is empty...");
-    const [{ count }] = await sql`SELECT COUNT(*)::int FROM municipalities`;
-    console.log(`Row count in municipalities table: ${count}`);
-    if (count === 0) {
-        console.log("Inserting municipalities data into the database...");
+    const url = "https://data.stat.fi/api/classifications/v2/classifications/kunta_1_20250101/classificationItems?content=data&meta=max&lang=fi&format=json";
+    const response = await axios.get(url);
+    const items = response.data;
 
-        const url = "https://data.stat.fi/api/classifications/v2/classifications/kunta_1_20250101/classificationItems?content=data&meta=max&lang=fi&format=json";
-        const response = await axios.get(url);
-        const items = response.data;
+    for (const item of items) {
+      const code = item.code;
+      const name = item.classificationItemNames?.[0]?.name || "";
 
-        for (const item of items) {
-            const code = item.code;
-            const name = item.classificationItemNames?.[0]?.name || "";
-
-            try {
-                await sql`
+      try {
+        await sql`
           INSERT INTO municipalities (code, name)
           VALUES (${code}, ${name})
           ON CONFLICT (code) DO NOTHING
         `;
-            } catch (err) {
-                console.error(`Failed to insert ${code} - ${name}:`, err.message);
-            }
-        }
-
-        console.log("Finished inserting municipalities.");
-    } else {
-        console.log("Municipalities table already has data. Skipping insert.");
+      } catch (err) {
+        console.error(`Failed to insert ${code} - ${name}:`, err.message);
+      }
     }
 
-    console.log("Extracting OSRM data...");
-    execSyncCustom(
-        "osrm-extract",
-        `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
-    );
-    console.log("Contracting OSRM data...");
-    execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
-    console.log("Storing OSRM data...");
-    execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
+    console.log("Finished inserting municipalities.");
+  } else {
+    console.log("Municipalities table already has data. Skipping insert.");
+  }
+
+  console.log("Extracting OSRM data...");
+  execSyncCustom(
+    "osrm-extract",
+    `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
+  );
+  console.log("Contracting OSRM data...");
+  execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
+  console.log("Storing OSRM data...");
+  execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
 }
