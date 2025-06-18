@@ -19,26 +19,6 @@ const validateFeatureCollection = (data, res) => {
   return true;
 };
 
-/* Because routes are handled in a single thread, the locking
- * mechanism does not require atomic operations or so.
- * TODO pls verify */
-
-let lockHeld = false;
-
-function acquireZoneRouterLock() {
-  if (lockHeld) return false;
-  lockHeld = true;
-  StatusService.startJob();
-  return true;
-}
-
-function releaseZoneRouterLock() {
-  if (!lockHeld)
-    throw new Error("called releaseZoneRouterLock() while lock wasn't held");
-  StatusService.endJob();
-  lockHeld = false;
-}
-
 zoneRouter.get("/", async (req, res) => {
   try {
     const zones = await zoneService.getZones();
@@ -50,28 +30,23 @@ zoneRouter.get("/", async (req, res) => {
 
 zoneRouter.post("/diff", async (req, res) => {
   const { added, deleted } = req.body;
-  if (
-    !validateFeatureCollection(
-      { type: "FeatureCollection", features: added },
-      res
-    )
-  )
-    return;
+  if (!validateFeatureCollection({ type: "FeatureCollection", features: added }, res)) return;
 
-  if (!acquireZoneRouterLock()) {
-    // TODO set Retry-After header!
-    return res
-      .status(503)
-      .json({ message: "This resource is currently in use." });
+  // OCC: deleted must be array of {id, updated_at}
+  if (!Array.isArray(deleted) || deleted.some((z) => !z.id || !z.updated_at)) {
+    return res.status(400).json({
+      message: "Each deleted zone must consist of an id and updated_at for concurrency control.",
+    });
   }
 
   try {
     await zoneService.updateZones(added, deleted);
     res.status(201).send();
   } catch (error) {
+    if (error.code === "CONFLICT") {
+      return handleError(res, error.message, error, 409);
+    }
     handleError(res, "An error occurred while changing zones.", error);
-  } finally {
-    releaseZoneRouterLock();
   }
 });
 
@@ -89,12 +64,17 @@ zoneRouter.post("/", async (req, res) => {
 
 zoneRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
+  const { updated_at } = req.body;
+  if (!updated_at) {
+    return res.status(400).json({ message: "Missing 'updated_at' for concurrency control." });
+  }
   try {
-    await zoneService.deleteZone(id);
-    res
-      .status(200)
-      .json({ message: `Zone with id ${id} deleted successfully` });
+    await zoneService.deleteZone(id, updated_at);
+    res.status(200).json({ message: `Zone with id ${id} deleted successfully` });
   } catch (error) {
+    if (error.code === "CONFLICT") {
+      return handleError(res, "Conflict: The resource was modified by another user.", error, 409);
+    }
     handleError(res, "An error occurred while deleting a zone", error);
   }
 });

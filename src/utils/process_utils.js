@@ -15,9 +15,16 @@ function makeOutputReader(name, dest) {
   };
 }
 
-function execSyncCustom(name, command) {
+function execSyncCustom(name, command, options = {}) {
   try {
-    console.log(formatOutput(name, execSync(command, { encoding: "utf-8" })));
+    const output = execSync(command, {
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        ...(options.env || {}),
+      },
+    });
+    console.log(formatOutput(name, output));
   } catch (error) {
     console.error(`Error in ${name}:\n${error}`);
     process.exit();

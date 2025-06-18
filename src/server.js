@@ -14,7 +14,7 @@ const nodelistRouter = require("./routes/nodelist");
 const trafficRouter = require("./routes/traffic");
 const limitsRouter = require("./routes/limits");
 const vehicleConfigRouter = require("./routes/vehicleConfig");
-const { disconnectedLinksRouter } = require("./routes/disconnected_links");
+const disconnectionsRouter = require("./routes/disconnections");
 
 const server = express();
 
@@ -42,6 +42,6 @@ server.use("/nodelist", nodelistRouter);
 server.use("/traffic", trafficRouter);
 server.use("/limits", limitsRouter);
 server.use("/vehicle-config", vehicleConfigRouter);
-server.use("/disconnected_links", disconnectedLinksRouter);
+server.use("/disconnected_links", disconnectionsRouter);
 
 module.exports = server;

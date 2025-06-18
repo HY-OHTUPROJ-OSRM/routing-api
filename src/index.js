@@ -1,28 +1,21 @@
 require("dotenv").config();
 
-const { PORT, ROUTE_DATA_PATH, OSRM_BACKEND_PORT } = require("./utils/config");
+const { PORT, OSRM_BACKEND_PORT } = require("./utils/config");
 const server = require("./server");
 const { spawn } = require("child_process");
 const ZoneService = require("./services/ZoneService");
 const TempRoadService = require("./services/TempRoadService");
 const {
   formatOutput,
-  execSyncCustom,
   makeOutputReader,
 } = require("./utils/process_utils");
-const { fetchDisconnectedLinks } = require("./routes/disconnected_links");
+const DisconnectionsService = require("./services/DisconnectionsService");
+const disconnectionsService = new DisconnectionsService();
 
 // Prepare OSRM data
-function prepareOsrmData() {
-  const drop = true;
-  execSyncCustom("create_database.sh", "./create_database.sh" + (drop ? " --drop" : ""));
-  execSyncCustom(
-    "osrm-extract",
-    `osrm-extract -p ./profiles/car.lua ${ROUTE_DATA_PATH}`
-  );
-  execSyncCustom("osrm-contract", `osrm-contract ${ROUTE_DATA_PATH}`);
-  execSyncCustom("osrm-datastore", `osrm-datastore ${ROUTE_DATA_PATH}`);
-  fetchDisconnectedLinks();
+async function prepareOsrmData() {
+  await require("./utils/createdatabase")();
+  disconnectionsService.fetchDisconnections();
 }
 
 // Start Express server after services are initialized
@@ -51,10 +44,7 @@ function startOsrmBackend() {
 
   osrm.stdout.on("data", (output) => {
     process.stdout.write(formatOutput("osrm-routed", output));
-    if (
-      !started &&
-      output.toString().includes("running and waiting for requests")
-    ) {
+    if (!started && output.toString().includes("running and waiting for requests")) {
       startServer();
       started = true;
     }
@@ -70,6 +60,10 @@ function startOsrmBackend() {
   });
 }
 
+async function start() {
+  await prepareOsrmData();
+  startOsrmBackend();
+}
+
 // Main execution
-prepareOsrmData();
-startOsrmBackend();
+start();

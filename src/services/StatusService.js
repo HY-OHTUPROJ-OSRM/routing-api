@@ -53,9 +53,7 @@ class StatusService {
 
   static getEstimate() {
     if (StatusService.startTime && StatusService.prevRunTime) {
-      return new Date(
-        Number(StatusService.startTime) + StatusService.prevRunTime
-      ).toISOString();
+      return new Date(Number(StatusService.startTime) + StatusService.prevRunTime).toISOString();
     } else {
       return undefined;
     }

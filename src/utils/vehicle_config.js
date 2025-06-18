@@ -2,10 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 function parseVehicleConfig(callback) {
-  const configPath = path.join(
-    __dirname,
-    "../../profiles/vehicle_class_config.lua"
-  );
+  const configPath = path.join(__dirname, "../../profiles/vehicle_class_config.lua");
 
   fs.readFile(configPath, "utf8", (err, data) => {
     if (err) return callback(err);
@@ -38,18 +35,14 @@ function parseVehicleConfig(callback) {
 
       // Abort if the braces are unbalanced
       if (braceDepth !== 0) {
-        return callback(
-          new Error("Could not find matching closing brace for classes")
-        );
+        return callback(new Error("Could not find matching closing brace for classes"));
       }
 
       // Extract the content inside the 'classes' table braces
       const inner = data.slice(firstBraceIndex + 1, i);
 
       // Split the content into individual class blocks (subtables)
-      const eachBlock = Array.from(
-        inner.matchAll(/{\s*([\s\S]*?)\s*}\s*,?/g)
-      ).map((m) => m[1]);
+      const eachBlock = Array.from(inner.matchAll(/{\s*([\s\S]*?)\s*}\s*,?/g)).map((m) => m[1]);
 
       const classes = [];
 
@@ -60,12 +53,7 @@ function parseVehicleConfig(callback) {
         const weightMatch = blockText.match(/weight_cutoff\s*=\s*([0-9.]+)/);
         const heightMatch = blockText.match(/height_cutoff\s*=\s*([0-9.]+)/);
 
-        if (
-          idMatch &&
-          nameMatch &&
-          weightMatch &&
-          heightMatch
-        ) {
+        if (idMatch && nameMatch && weightMatch && heightMatch) {
           classes.push({
             id: Number(idMatch[1]),
             name: nameMatch[1],

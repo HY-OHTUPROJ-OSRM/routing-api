@@ -6,8 +6,6 @@ const calculateSegmentSpeeds = require("../utils/segment_speeds");
 const { makeOutputReader } = require("../utils/process_utils");
 const { ROUTE_DATA_PATH } = require("../utils/config");
 
-const SEGMENT_SPEED_CSV_PATH = "/tmp/routing-api-segments.csv";
-
 // All modifications to this must be atomic at the level of JS execution!
 
 class ZoneService {
@@ -35,15 +33,27 @@ class ZoneService {
   async updateZones(addedZones, deletedZones) {
     await this.repository.beginTransaction();
     try {
-      await this._changeZones(addedZones, deletedZones);
+      // OCC: deletedZones is array of {id, updated_at}
+      const deleteIds = deletedZones.map((z) => z.id);
+      const deleteUpdatedAts = deletedZones.map((z) => z.updated_at);
+      const deleteResult = await this.repository.deleteBatch(deleteIds, deleteUpdatedAts);
+      if (!deleteResult.success) {
+        const err = new Error(
+          `Conflict: Zone(s) with id(s) ${deleteResult.conflictIds.join(", ")} were modified by another user.`
+        );
+        err.code = "CONFLICT";
+        throw err;
+      }
+      await this._createZones(addedZones);
       await this.repository.commitTransaction();
     } catch (error) {
       await this.repository.rollbackTransaction();
+      if (error.code === "CONFLICT") throw error;
       throw error;
     }
   }
 
-  async _changeZones(newZones, deletedZones) {
+  async _createZones(newZones) {
     // Avoid mutating input
     for (const zone of newZones) {
       const zoneCopy = JSON.parse(JSON.stringify(zone));
@@ -52,10 +62,6 @@ class ZoneService {
     }
 
     console.log(`${newZones ? newZones.length : 0} zones created`);
-
-    await this.repository.delete(deletedZones);
-
-    console.log(`${deletedZones ? deletedZones.length : 0} zones deleted`);
 
     await this.refreshBlockedSegments();
   }
@@ -90,12 +96,7 @@ class ZoneService {
 
     process.stdout.write("calculating segments speeds...");
 
-    let newSegments = await calculateSegmentSpeeds(
-      roadblockPolygons,
-      [],
-      speedzonePolygons,
-      paths
-    );
+    let newSegments = await calculateSegmentSpeeds(roadblockPolygons, [], speedzonePolygons, paths);
 
     console.log(" done");
 
@@ -131,41 +132,37 @@ class ZoneService {
     await this.updateZones(zones, []);
   }
 
-  async deleteZone(id) {
+  async deleteZone(id, expectedUpdatedAt) {
     await this.repository.beginTransaction();
     try {
-      await this.repository.delete([parseInt(id)]);
+      const deleted = await this.repository.delete([parseInt(id)], expectedUpdatedAt);
+      if (!deleted) {
+        const err = new Error("Conflict: The resource was modified by another user.");
+        err.code = "CONFLICT";
+        throw err;
+      }
       await this.repository.commitTransaction();
       // Update blocked segments after deletion
       await this.refreshBlockedSegments();
     } catch (error) {
       await this.repository.rollbackTransaction();
+      if (error.code === "CONFLICT") throw error;
       throw error;
     }
   }
 
   async writeCSV(csv) {
-    const filename = SEGMENT_SPEED_CSV_PATH;
+    const filename = "/tmp/routing-api-segments.csv";
     const file = await open(filename, "w");
     await file.write(csv);
     await file.close();
 
     console.log("wrote CSV file");
 
-    const contract = spawn("osrm-contract", [
-      "--segment-speed-file",
-      filename,
-      ROUTE_DATA_PATH,
-    ]);
+    const contract = spawn("osrm-contract", ["--segment-speed-file", filename, ROUTE_DATA_PATH]);
 
-    contract.stdout.on(
-      "data",
-      makeOutputReader("osrm-contract", process.stdout)
-    );
-    contract.stderr.on(
-      "data",
-      makeOutputReader("osrm-contract", process.stderr)
-    );
+    contract.stdout.on("data", makeOutputReader("osrm-contract", process.stdout));
+    contract.stderr.on("data", makeOutputReader("osrm-contract", process.stderr));
 
     return new Promise((resolve, reject) => {
       contract.on("exit", (code, signal) => {
@@ -178,14 +175,8 @@ class ZoneService {
 
         const datastore = spawn("osrm-datastore", [ROUTE_DATA_PATH]);
 
-        datastore.stdout.on(
-          "data",
-          makeOutputReader("osrm-datastore", process.stdout)
-        );
-        datastore.stderr.on(
-          "data",
-          makeOutputReader("osrm-datastore", process.stderr)
-        );
+        datastore.stdout.on("data", makeOutputReader("osrm-datastore", process.stdout));
+        datastore.stderr.on("data", makeOutputReader("osrm-datastore", process.stderr));
 
         datastore.on("exit", (code, signal) => {
           if (code != 0) {
