@@ -69,7 +69,7 @@ class TempRoadRepository {
         )
         VALUES (
           ${type}, ${name}, ${status}, ${JSON.stringify(tags)},
-          ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(geom)}), 3857),
+          ST_Transform(ST_GeomFromText(${geom}, 4326), 3857),
           ${length}, ${speed}, ${max_weight}, ${max_height}, ${description}
         )
         RETURNING

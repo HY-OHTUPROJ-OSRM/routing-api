@@ -14,7 +14,7 @@ const { fetchDisconnectedLinks } = require("./routes/disconnected_links");
 
 // Prepare OSRM data
 function prepareOsrmData() {
-  const drop = false;
+  const drop = true;
   execSyncCustom("create_database.sh", "./create_database.sh" + (drop ? " --drop" : ""));
   execSyncCustom(
     "osrm-extract",
