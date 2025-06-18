@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS zones (
     name TEXT,
     effect_value DOUBLE PRECISION,
     source TEXT,
-    geom GEOMETRY(POLYGON, 3857) CHECK (ST_IsValid(geom)),
+    geom GEOMETRY(POLYGON, 4326) CHECK (ST_IsValid(geom)),
     updated_at TIMESTAMP DEFAULT NOW(),
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS temporary_routes(
     name TEXT,
     status BOOLEAN DEFAULT true,
     tags JSONB DEFAULT '[]',
-    geom GEOMETRY(LINESTRING, 3857) CHECK (ST_IsValid(geom)),
+    geom GEOMETRY(LINESTRING, 4326) CHECK (ST_IsValid(geom)),
     length DOUBLE PRECISION,
     speed INTEGER,
     max_weight DOUBLE PRECISION,
