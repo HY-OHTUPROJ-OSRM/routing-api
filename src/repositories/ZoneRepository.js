@@ -45,14 +45,29 @@ class ZoneRepository {
       const zoneResult = await this.activeSql`
         WITH gps_zones AS (
           SELECT
-            id, type, effect_value, name, source, ST_Transform(geom, 4326)
+            id, type, effect_value, name, source, ST_AsGeoJSON(geom) as geom, 
+            created_at, updated_at
           FROM
             zones
         )
         SELECT
           json_build_object(
             'type', 'FeatureCollection',
-            'features', COALESCE(json_agg(ST_AsGeoJSON(gps_zones.*)::json), '[]'::json)
+            'features', COALESCE(json_agg(
+              json_build_object(
+                'type', 'Feature',
+                'geometry', geom::json,
+                'properties', json_build_object(
+                  'id', id,
+                  'type', type,
+                  'effect_value', effect_value,
+                  'name', name,
+                  'source', source,
+                  'created_at', created_at,
+                  'updated_at', updated_at
+                )
+              )
+            ), '[]'::json)
           ) AS geojson
         FROM
           gps_zones;
@@ -76,7 +91,7 @@ class ZoneRepository {
           ${name},
           ${effectValue ?? null},
           ${source ?? null},
-          ST_Transform(St_GeomFromGeoJSON(${geometry}), 3857)
+          St_GeomFromGeoJSON(${geometry})
         )
         RETURNING
           id;
@@ -90,9 +105,7 @@ class ZoneRepository {
   async delete(ids, expectedUpdatedAt) {
     if (!Array.isArray(ids)) return;
     // Convert all to numbers, filter out non-integers, null, undefined, NaN
-    const filteredIds = ids
-      .map((id) => Number(id))
-      .filter((id) => Number.isInteger(id) && id > 0);
+    const filteredIds = ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0);
     if (filteredIds.length === 0) return;
     if (!expectedUpdatedAt) throw new Error("Missing expectedUpdatedAt for OCC");
     try {
@@ -174,14 +187,10 @@ class ZoneRepository {
       `;
       return result.map((row) => ({
         speed: row.speed,
-        nodes: new Map(
-          row.nodes.map(([nodeId, lat, lon]) => [nodeId, { lat, lon }])
-        ),
+        nodes: new Map(row.nodes.map(([nodeId, lat, lon]) => [nodeId, { lat, lon }])),
       }));
     } catch (err) {
-      throw new Error(
-        `Failed to fetch paths overlapping zones: ${err.message}`
-      );
+      throw new Error(`Failed to fetch paths overlapping zones: ${err.message}`);
     }
   }
 }
