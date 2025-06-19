@@ -104,23 +104,22 @@ class ZoneRepository {
 
   async delete(ids, expectedUpdatedAt) {
     if (!Array.isArray(ids)) return;
-    // Convert all to numbers, filter out non-integers, null, undefined, NaN
     const filteredIds = ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0);
     if (filteredIds.length === 0) return;
     if (!expectedUpdatedAt) throw new Error("Missing expectedUpdatedAt for OCC");
     try {
+      // Fuzzy match: allow up to 10ms difference
       const result = await this.activeSql`
         DELETE FROM zones
-        WHERE id = ANY(${filteredIds}) AND updated_at = ${expectedUpdatedAt};
+        WHERE id = ANY(${filteredIds})
+        AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01;
       `;
-      // If no rows were deleted, OCC failed
       return result.count > 0;
     } catch (err) {
       throw new Error(`Failed to delete zones: ${err.message}`);
     }
   }
 
-  // OCC batch delete: ids and updatedAts must be same length
   async deleteBatch(ids, updatedAts) {
     if (!Array.isArray(ids) || !Array.isArray(updatedAts) || ids.length !== updatedAts.length) {
       throw new Error("deleteBatch: ids and updatedAts must be arrays of same length");
@@ -131,8 +130,9 @@ class ZoneRepository {
       for (let i = 0; i < ids.length; i++) {
         const id = Number(ids[i]);
         const updatedAt = updatedAts[i];
+        // Fuzzy match: allow up to 10ms difference
         const result = await this.activeSql`
-          DELETE FROM zones WHERE id = ${id} AND updated_at = ${updatedAt};
+          DELETE FROM zones WHERE id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${updatedAt}::timestamptz))) < 0.01;
         `;
         if (result.count === 0) conflictIds.push(id);
       }
