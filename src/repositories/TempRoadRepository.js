@@ -1,5 +1,32 @@
 const databaseConnection = require("../utils/database");
 
+// Helper to parse and validate geometry (GeoJSON or WKT)
+function parseAndValidateGeom(geom) {
+  if (!geom) return false;
+  // GeoJSON object
+  if (typeof geom === 'object' && geom.type && Array.isArray(geom.coordinates)) {
+    if (
+      geom.type === 'LineString' &&
+      geom.coordinates.length >= 2 &&
+      geom.coordinates.every(
+        c => Array.isArray(c) && c.length === 2 && c.every(v => typeof v === 'number' && !isNaN(v))
+      )
+    ) {
+      return { geomSql: 'ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)', geomValue: JSON.stringify(geom) };
+    }
+    return false;
+  }
+  // WKT string (basic validation: starts with LINESTRING and not empty)
+  if (typeof geom === 'string') {
+    const trimmed = geom.trim();
+    if (/^LINESTRING/i.test(trimmed) && trimmed.length > 'LINESTRING'.length + 2) { // +2 for ()
+      return { geomSql: 'ST_SetSRID(ST_GeomFromText($1, 4326), 4326)', geomValue: trimmed };
+    }
+    return false;
+  }
+  return false;
+}
+
 class TempRoadRepository {
   constructor() {
     this.sql = databaseConnection;
@@ -61,28 +88,11 @@ class TempRoadRepository {
       description = null,
     } = data;
 
-    let geomSql;
-    let geomValue;
-    let isLineString = false;
-    if (typeof geom === 'object' && geom !== null) {
-      // Accept GeoJSON object
-      if (geom.type && geom.type.toUpperCase() === 'LINESTRING') {
-        isLineString = true;
-      }
-      geomSql = 'ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)';
-      geomValue = JSON.stringify(geom);
-    } else if (typeof geom === 'string') {
-      const wktTypes = ['LINESTRING'];
-      const isWkt = wktTypes.some(type => geom.trim().toUpperCase().startsWith(type));
-      if (isWkt) {
-        isLineString = true;
-        geomSql = 'ST_SetSRID(ST_GeomFromText($1, 4326), 4326)';
-        geomValue = geom;
-      }
+    const parsedGeom = parseAndValidateGeom(geom);
+    if (!parsedGeom) {
+      throw new Error('Invalid geometry: Only valid LineString geometry is supported');
     }
-    if (!isLineString) {
-      throw new Error('Only LineString geometry is supported');
-    }
+    const { geomSql, geomValue } = parsedGeom;
 
     try {
       const result = await this.sql.unsafe(`
@@ -145,8 +155,12 @@ class TempRoadRepository {
         setClauses.push(`${key} = $${idx++}`);
         values.push(JSON.stringify(value));
       } else if (key === "geom") {
-        setClauses.push(`${key} = ST_SetSRID(ST_GeomFromGeoJSON($${idx++}), 3857)`);
-        values.push(JSON.stringify(value));
+        const parsedGeom = parseAndValidateGeom(value);
+        if (parsedGeom) {
+          setClauses.push(`${key} = ${parsedGeom.geomSql.replace('$1', `$${idx}`)}`);
+          values.push(parsedGeom.geomValue);
+          idx++;
+        }
       } else {
         setClauses.push(`${key} = $${idx++}`);
         values.push(value);
