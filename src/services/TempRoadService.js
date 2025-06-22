@@ -1,4 +1,5 @@
 const TempRoadRepository = require("../repositories/TempRoadRepository");
+const { parseAndValidateGeom } = require("../utils/linestring_parser");
 
 class TempRoadService {
   static activeTempRoads = [];
@@ -27,6 +28,13 @@ class TempRoadService {
 
   async createTempRoad(data) {
     try {
+      if (data.geom) {
+        const parsedGeom = parseAndValidateGeom(data.geom);
+        if (!parsedGeom) {
+          throw new Error('Invalid geometry: Only valid LineString GeoJSON geometry is supported');
+        }
+        data.geom = parsedGeom;
+      }
       const newRoad = await this.repository.create(data);
       console.log(`New temporary road created with ID: ${newRoad.id}`);
       if (newRoad.status) {
@@ -44,6 +52,18 @@ class TempRoadService {
       const existing = await this.repository.getById(id);
       if (!existing) {
         throw new Error(`Temporary road with ID ${id} does not exist`);
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'geom')) {
+        if (updates.geom !== null && updates.geom !== undefined) {
+          const parsedGeom = parseAndValidateGeom(updates.geom, true);
+          if (!parsedGeom) {
+            delete updates.geom;
+          } else {
+            updates.geom = parsedGeom;
+          }
+        } else {
+          updates.geom = null;
+        }
       }
       const updated = await this.repository.update(id, updates, expectedUpdatedAt);
       if (!updated) {

@@ -1,31 +1,5 @@
 const databaseConnection = require("../utils/database");
 
-// Helper to parse and validate geometry (GeoJSON or WKT)
-function parseAndValidateGeom(geom) {
-  if (!geom) return false;
-  // GeoJSON object
-  if (typeof geom === 'object' && geom.type && Array.isArray(geom.coordinates)) {
-    if (
-      geom.type === 'LineString' &&
-      geom.coordinates.length >= 2 &&
-      geom.coordinates.every(
-        c => Array.isArray(c) && c.length === 2 && c.every(v => typeof v === 'number' && !isNaN(v))
-      )
-    ) {
-      return { geomSql: 'ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)', geomValue: JSON.stringify(geom) };
-    }
-    return false;
-  }
-  // WKT string (basic validation: starts with LINESTRING and not empty)
-  if (typeof geom === 'string') {
-    const trimmed = geom.trim();
-    if (/^LINESTRING/i.test(trimmed) && trimmed.length > 'LINESTRING'.length + 2) { // +2 for ()
-      return { geomSql: 'ST_SetSRID(ST_GeomFromText($1, 4326), 4326)', geomValue: trimmed };
-    }
-    return false;
-  }
-  return false;
-}
 
 class TempRoadRepository {
   constructor() {
@@ -88,12 +62,6 @@ class TempRoadRepository {
       description = null,
     } = data;
 
-    const parsedGeom = parseAndValidateGeom(geom);
-    if (!parsedGeom) {
-      throw new Error('Invalid geometry: Only valid LineString geometry is supported');
-    }
-    const { geomSql, geomValue } = parsedGeom;
-
     try {
       const result = await this.sql.unsafe(`
         INSERT INTO temporary_routes (
@@ -101,18 +69,18 @@ class TempRoadRepository {
           length, speed, max_weight, max_height, description
         )
         VALUES (
-          $2, $3, $4, $5, ${geomSql},
+          $1, $2, $3, $4, $5,
           $6, $7, $8, $9, $10
         )
         RETURNING
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, created_at, updated_at;
       `, [
-        geomValue,
         type,
         name,
         status,
         JSON.stringify(tags),
+        geom,
         length,
         speed,
         max_weight,
@@ -149,18 +117,52 @@ class TempRoadRepository {
     const values = [];
     let idx = 1;
 
+    // Special handling for partial geom update
+    if (Object.prototype.hasOwnProperty.call(updates, 'geom') && updates.geom) {
+      try {
+        let geomObj = typeof updates.geom === 'string' ? JSON.parse(updates.geom) : updates.geom;
+        if (
+          geomObj &&
+          geomObj.type === 'LineString' &&
+          Array.isArray(geomObj.coordinates) &&
+          geomObj.coordinates.length === 2
+        ) {
+          // If any coordinate is invalid (NaN), fetch from DB and merge
+          const invalids = geomObj.coordinates.map(
+            c => !Array.isArray(c) || c.length !== 2 || c.some(v => typeof v !== 'number' || isNaN(v))
+          );
+          if (invalids.some(Boolean)) {
+            // Fetch current geom from DB
+            const current = await this.getById(id);
+            if (current && current.geom && current.geom.type === 'LineString' && Array.isArray(current.geom.coordinates)) {
+              const mergedCoords = geomObj.coordinates.map((c, i) => {
+                if (!Array.isArray(c) || c.length !== 2 || c.some(v => typeof v !== 'number' || isNaN(v))) {
+                  // Use DB value
+                  return current.geom.coordinates[i];
+                }
+                return c;
+              });
+              geomObj.coordinates = mergedCoords;
+              updates.geom = JSON.stringify(geomObj);
+            }
+          } else {
+            // All valid, stringify if needed
+            updates.geom = typeof updates.geom === 'string' ? updates.geom : JSON.stringify(geomObj);
+          }
+        }
+      } catch (e) {
+        // If parsing fails, ignore and let DB error out
+      }
+    }
+
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedFields.includes(key)) continue;
       if (key === "tags") {
         setClauses.push(`${key} = $${idx++}`);
         values.push(JSON.stringify(value));
       } else if (key === "geom") {
-        const parsedGeom = parseAndValidateGeom(value);
-        if (parsedGeom) {
-          setClauses.push(`${key} = ${parsedGeom.geomSql.replace('$1', `$${idx}`)}`);
-          values.push(parsedGeom.geomValue);
-          idx++;
-        }
+        setClauses.push(`${key} = $${idx++}`);
+        values.push(value);
       } else {
         setClauses.push(`${key} = $${idx++}`);
         values.push(value);
