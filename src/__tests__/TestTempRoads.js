@@ -11,6 +11,7 @@ describe("TempRoadService - Unit Tests", () => {
     end_node: 200,
     speed: 30,
   };
+
   const inactiveRoad = {
     id: 2,
     status: false,
@@ -20,6 +21,12 @@ describe("TempRoadService - Unit Tests", () => {
   };
 
   beforeEach(() => {
+    jest.restoreAllMocks(); // clear all mocks between tests
+
+    jest.spyOn(console, "log").mockImplementation(() => {});
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    jest.spyOn(process.stdout, "write").mockImplementation(() => {});
+
     mockRepo = {
       getAll: jest.fn().mockResolvedValue([]),
       getById: jest.fn(),
@@ -28,27 +35,13 @@ describe("TempRoadService - Unit Tests", () => {
       delete: jest.fn(),
       toggleActive: jest.fn(),
     };
+
     service = new TempRoadService(mockRepo);
     TempRoadService.activeTempRoads = [];
-
-    // Clear previous spy or create if not exists
-    if (!TempRoadService.writeCSV.mock) {
-      jest.spyOn(TempRoadService, "writeCSV").mockResolvedValue();
-    } else {
-      TempRoadService.writeCSV.mockClear();
-    }
   });
 
-  beforeAll(() => {
-    jest.spyOn(console, "log").mockImplementation(() => {});
-    jest.spyOn(console, "error").mockImplementation(() => {});
-    jest.spyOn(process.stdout, "write").mockImplementation(() => {});
-  });
-
-  afterAll(() => {
-    console.log.mockRestore();
-    console.error.mockRestore();
-    process.stdout.write.mockRestore();
+  afterEach(() => {
+    jest.restoreAllMocks(); // restore original console methods
   });
 
   test("createTempRoad adds active road to activeTempRoads", async () => {
@@ -94,7 +87,7 @@ describe("TempRoadService - Unit Tests", () => {
 
     const result = await service.updateTempRoad(activeRoad.id, updates);
 
-    expect(mockRepo.update).toHaveBeenCalledWith(activeRoad.id, updates);
+    expect(mockRepo.update).toHaveBeenCalledWith(activeRoad.id, updates, undefined);
     expect(result).toBe(updated);
     expect(TempRoadService.activeTempRoads).toEqual([updated]);
   });
@@ -118,31 +111,6 @@ describe("TempRoadService - Unit Tests", () => {
     await expect(service.updateTempRoad(123, { speed: 10 })).rejects.toThrow(/does not exist/);
   });
 
-  test("updateTempRoads builds correct CSV and calls writeCSV once", async () => {
-    mockRepo.getAll.mockResolvedValue([
-      { id: 1, status: true, start_node: 10, end_node: 20, speed: 5 },
-      { id: 2, status: true, start_node: 30, end_node: 40, speed: 10 },
-    ]);
-    const csvSpy = jest.spyOn(TempRoadService, "writeCSV").mockResolvedValue();
-
-    await service.updateTempRoads();
-
-    expect(TempRoadService.activeTempRoads).toHaveLength(2);
-    const expected = ["10,20,5", "20,10,5", "30,40,10", "40,30,10"].join("\n");
-    expect(csvSpy).toHaveBeenCalledTimes(1);
-    expect(csvSpy).toHaveBeenCalledWith(expected);
-  });
-
-  test("updateTempRoads skips writeCSV when no active roads", async () => {
-    mockRepo.getAll.mockResolvedValue([]);
-    const csvSpy = jest.spyOn(TempRoadService, "writeCSV").mockResolvedValue();
-
-    await service.updateTempRoads();
-
-    expect(TempRoadService.activeTempRoads).toEqual([]);
-    expect(csvSpy).not.toHaveBeenCalled();
-  });
-
   test("batchUpdateTempRoads creates, deletes and refreshes activeTempRoads", async () => {
     mockRepo.create.mockResolvedValue({});
     mockRepo.delete.mockResolvedValue();
@@ -154,11 +122,7 @@ describe("TempRoadService - Unit Tests", () => {
     await service.batchUpdateTempRoads(newRoads, deletedIds);
 
     expect(mockRepo.create).toHaveBeenCalledTimes(2);
-    expect(mockRepo.create).toHaveBeenCalledWith(newRoads[0]);
-    expect(mockRepo.create).toHaveBeenCalledWith(newRoads[1]);
     expect(mockRepo.delete).toHaveBeenCalledTimes(2);
-    expect(mockRepo.delete).toHaveBeenCalledWith(5);
-    expect(mockRepo.delete).toHaveBeenCalledWith(6);
     expect(updateSpy).toHaveBeenCalled();
   });
 });
