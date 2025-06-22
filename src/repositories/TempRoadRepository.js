@@ -61,21 +61,54 @@ class TempRoadRepository {
       description = null,
     } = data;
 
+    let geomSql;
+    let geomValue;
+    let isLineString = false;
+    if (typeof geom === 'object' && geom !== null) {
+      // Accept GeoJSON object
+      if (geom.type && geom.type.toUpperCase() === 'LINESTRING') {
+        isLineString = true;
+      }
+      geomSql = 'ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)';
+      geomValue = JSON.stringify(geom);
+    } else if (typeof geom === 'string') {
+      const wktTypes = ['LINESTRING'];
+      const isWkt = wktTypes.some(type => geom.trim().toUpperCase().startsWith(type));
+      if (isWkt) {
+        isLineString = true;
+        geomSql = 'ST_SetSRID(ST_GeomFromText($1, 4326), 4326)';
+        geomValue = geom;
+      }
+    }
+    if (!isLineString) {
+      throw new Error('Only LineString geometry is supported');
+    }
+
     try {
-      const result = await this.sql`
+      const result = await this.sql.unsafe(`
         INSERT INTO temporary_routes (
           type, name, status, tags, geom,
           length, speed, max_weight, max_height, description
         )
         VALUES (
-          ${type}, ${name}, ${status}, ${JSON.stringify(tags)},
-          ST_SetSRID(ST_GeomFromText(${geom}, 4326), 4326),
-          ${length}, ${speed}, ${max_weight}, ${max_height}, ${description}
+          $2, $3, $4, $5, ${geomSql},
+          $6, $7, $8, $9, $10
         )
         RETURNING
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, created_at, updated_at;
-      `;
+      `, [
+        geomValue,
+        type,
+        name,
+        status,
+        JSON.stringify(tags),
+        length,
+        speed,
+        max_weight,
+        max_height,
+        description
+      ]);
       const item = result[0];
       item.tags = JSON.parse(item.tags);
       item.geom = item.geom ? JSON.parse(item.geom) : null;
