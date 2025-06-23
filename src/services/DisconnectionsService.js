@@ -156,7 +156,8 @@ class DisconnectionsService {
         lon: node.end_node_lon
       },
       distance: node.distance,
-      county_name: node.county_name
+      county_name: node.county_name,
+      updated_at: node.updated_at
     }));
   }
 
