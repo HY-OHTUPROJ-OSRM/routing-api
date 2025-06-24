@@ -273,7 +273,7 @@ class RouteService {
       }
     } else {
       const normalResp = await normalRespPromise;
-      return normalResp.routes && normalResp.routes[0] ? normalResp.routes[0] : normalResp;
+      return normalResp;
     }
   }
 }
