@@ -81,32 +81,46 @@ class TempRoadService {
     }
   }
 
-  async deleteTempRoad(id) {
+  async deleteTempRoad(id, expectedUpdatedAt) {
     try {
       const road = await this.repository.getById(id);
       if (!road) {
         throw new Error(`Temporary road with ID ${id} does not exist`);
       }
-      await this.repository.delete(id);
+      const deleted = await this.repository.delete(id, expectedUpdatedAt);
+      if (!deleted) {
+        const err = new Error("Conflict: The resource was modified by another user.");
+        err.code = "CONFLICT";
+        throw err;
+      }
       console.log(`Temporary road with ID ${id} deleted`);
-      await this.updateTempRoads();
+      if (road.status) {
+        await this.updateTempRoads();
+      }
     } catch (err) {
+      if (err.code === "CONFLICT") throw err;
       console.error(`Failed to delete temporary road with ID ${id}:`, err);
       throw err;
     }
   }
 
-  async toggleTempRoadActive(id) {
+  async toggleTempRoadActive(id, expectedUpdatedAt) {
     try {
       const road = await this.repository.getById(id);
       if (!road) {
         throw new Error(`Temporary road with ID ${id} does not exist`);
       }
-      const toggled = await this.repository.toggleActive(id);
+      const toggled = await this.repository.toggleActive(id, expectedUpdatedAt);
+      if (!toggled) {
+        const err = new Error("Conflict: The resource was modified by another user.");
+        err.code = "CONFLICT";
+        throw err;
+      }
       console.log(`Temporary road with ID ${id} toggled to status: ${toggled.status}`);
       await this.updateTempRoads();
       return toggled;
     } catch (err) {
+      if (err.code === "CONFLICT") throw err;
       console.error(`Failed to toggle temporary road with ID ${id}:`, err);
       throw err;
     }
@@ -126,12 +140,15 @@ class TempRoadService {
     }
   }
 
-  async batchUpdateTempRoads(newRoads, deletedRoadIds) {
+  async batchUpdateTempRoads(newRoads, deletedRoads) {
     try {
       await Promise.all(newRoads.map(async (road) => this.createTempRoad(road)));
       console.log(`${newRoads ? newRoads.length : 0} temporary roads created`);
-      await Promise.all(deletedRoadIds.map((id) => this.repository.delete(id)));
-      console.log(`${deletedRoadIds ? deletedRoadIds.length : 0} temporary roads deleted`);
+      // deletedRoads should be array of objects: [{ id, updated_at }]
+      await Promise.all(
+        (deletedRoads || []).map(({ id, updated_at }) => this.repository.delete(id, updated_at))
+      );
+      console.log(`${deletedRoads ? deletedRoads.length : 0} temporary roads deleted`);
       await this.updateTempRoads();
     } catch (err) {
       console.error("Failed to batch update temporary roads:", err);

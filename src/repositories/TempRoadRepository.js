@@ -200,20 +200,23 @@ class TempRoadRepository {
     }
   }
 
-  async delete(id) {
+  async delete(id, expectedUpdatedAt) {
     try {
-      await this.sql`
+      const result = await this.sql`
         DELETE FROM
           temporary_routes
         WHERE
-          id = ${id};
+          id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01
+        RETURNING id;
       `;
+      if (!result[0]) return null;
+      return result[0];
     } catch (err) {
       throw new Error(`Failed to delete temporary route: ${err.message}`);
     }
   }
 
-  async toggleActive(id) {
+  async toggleActive(id, expectedUpdatedAt) {
     try {
       const result = await this.sql`
         UPDATE
@@ -222,11 +225,12 @@ class TempRoadRepository {
           status = NOT status,
           updated_at = NOW()
         WHERE
-          id = ${id}
+          id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01
         RETURNING
-          id, type, name, status, tags, geom,
+          id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, created_at, updated_at;
       `;
+      if (!result[0]) return null;
       const item = result[0];
       item.tags = JSON.parse(item.tags);
       item.geom = item.geom ? JSON.parse(item.geom) : null;

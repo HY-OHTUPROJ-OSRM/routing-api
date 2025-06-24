@@ -51,10 +51,8 @@ tempsRouter.patch("/:id", async (req, res) => {
     const updated = await service.updateTempRoad(req.params.id, req.body, req.body.updated_at);
     res.json(updated);
   } catch (error) {
-    if (error.code === "CONFLICT") {
-      return res
-        .status(409)
-        .json({ message: "Conflict: The resource was modified by another user.", error: error.message });
+    if (error.message.includes("does not exist")) {
+      return handleError(res, error.message, error, 404);
     }
     handleError(res, "Error updating temp", error);
   }
@@ -63,7 +61,10 @@ tempsRouter.patch("/:id", async (req, res) => {
 // Delete a temporary road
 tempsRouter.delete("/:id", async (req, res) => {
   try {
-    await service.deleteTempRoad(req.params.id);
+    if (!req.body.updated_at) {
+      return res.status(400).json({ message: "Missing 'updated_at' for concurrency control." });
+    }
+    await service.deleteTempRoad(req.params.id, req.body.updated_at);
     res.json({ message: `Temp with id ${req.params.id} deleted` });
   } catch (error) {
     if (error.message.includes("does not exist")) {
@@ -76,7 +77,10 @@ tempsRouter.delete("/:id", async (req, res) => {
 // Toggle active state
 tempsRouter.post("/:id/toggle", async (req, res) => {
   try {
-    const toggled = await service.toggleTempRoadActive(req.params.id);
+    if (!req.body.updated_at) {
+      return res.status(400).json({ message: "Missing 'updated_at' for concurrency control." });
+    }
+    const toggled = await service.toggleTempRoadActive(req.params.id, req.body.updated_at);
     res.json(toggled);
   } catch (error) {
     if (error.message.includes("does not exist")) {
