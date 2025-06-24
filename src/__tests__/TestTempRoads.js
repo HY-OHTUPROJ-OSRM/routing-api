@@ -57,11 +57,12 @@ describe("TempRoadService - Unit Tests", () => {
 
   test("deleteTempRoad removes a road and updates activeTempRoads", async () => {
     mockRepo.getById.mockResolvedValue(activeRoad);
+    mockRepo.delete.mockResolvedValue(true);
     mockRepo.getAll.mockResolvedValue([]);
 
     await service.deleteTempRoad(activeRoad.id);
 
-    expect(mockRepo.delete).toHaveBeenCalledWith(activeRoad.id);
+    expect(mockRepo.delete).toHaveBeenCalledWith(activeRoad.id, undefined);
     expect(TempRoadService.activeTempRoads).toEqual([]);
   });
 
@@ -73,7 +74,7 @@ describe("TempRoadService - Unit Tests", () => {
 
     const result = await service.toggleTempRoadActive(inactiveRoad.id);
 
-    expect(mockRepo.toggleActive).toHaveBeenCalledWith(inactiveRoad.id);
+    expect(mockRepo.toggleActive).toHaveBeenCalledWith(inactiveRoad.id, undefined);
     expect(result).toBe(toggled);
     expect(TempRoadService.activeTempRoads).toEqual([toggled]);
   });
