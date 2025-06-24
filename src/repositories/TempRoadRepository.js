@@ -60,6 +60,7 @@ class TempRoadRepository {
       max_weight = null,
       max_height = null,
       description = null,
+      direction = 2 // two-way (default)
     } = data;
 
     try {
@@ -112,7 +113,9 @@ class TempRoadRepository {
       "max_weight",
       "max_height",
       "description",
+      "direction"
     ];
+
     const setClauses = [];
     const values = [];
     let idx = 1;
