@@ -158,7 +158,7 @@ class ZoneRepository {
               FROM
                 planet_osm_line AS lines, zones
               WHERE
-                ST_Intersects(lines.way, zones.geom)
+                ST_Intersects(lines.way, ST_Transform(zones.geom, 3857))
             ) AS intersections
           INNER JOIN
             planet_osm_ways AS ways ON intersections.osm_id = ways.id

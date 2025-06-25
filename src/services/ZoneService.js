@@ -9,7 +9,7 @@ const { ROUTE_DATA_PATH } = require("../utils/config");
 // All modifications to this must be atomic at the level of JS execution!
 
 class ZoneService {
-  affectedSegments = [];
+  static affectedSegments = [];
 
   constructor(repository = new ZoneRepository()) {
     this.repository = repository;
@@ -20,7 +20,7 @@ class ZoneService {
   }
 
   async getBlockedSegments() {
-    return this.affectedSegments;
+    return ZoneService.affectedSegments;
   }
 
   async getZones() {
@@ -104,7 +104,7 @@ class ZoneService {
 
     // Restore the original speeds for segments that
     // were affected previously but not anymore.
-    for (const segment of this.affectedSegments) {
+    for (const segment of ZoneService.affectedSegments) {
       const startID = segment.start.id;
       const endID = segment.end.id;
 
@@ -114,10 +114,10 @@ class ZoneService {
       }
     }
 
-    this.affectedSegments = Array.from(newSegments.values());
+    ZoneService.affectedSegments = Array.from(newSegments.values());
 
     // Set speeds for new segments
-    for (const segment of this.affectedSegments) {
+    for (const segment of ZoneService.affectedSegments) {
       const startID = segment.start.id;
       const endID = segment.end.id;
 

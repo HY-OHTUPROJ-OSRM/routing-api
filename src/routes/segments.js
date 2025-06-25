@@ -3,10 +3,12 @@ const ZoneService = require("../services/ZoneService");
 
 const segmentRouter = Router();
 
+const zoneService = new ZoneService();
+
 // Get all blocked segments
 segmentRouter.get("/", async (req, res) => {
   try {
-    const segments = await ZoneService.getBlockedSegments();
+    const segments = await zoneService.getBlockedSegments();
     res.json(segments);
   } catch (error) {
     res.status(500).json({
