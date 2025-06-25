@@ -210,6 +210,18 @@ class RouteService {
           console.error(`[RouteService] Temp road #${idx} fetch failed for exit:`, e);
           return null;
         }
+        
+        // Validate that the exit route actually starts close to the temp road exit point
+        const exitSteps = resp2?.routes?.[0]?.legs?.[0]?.steps;
+        if (!exitSteps || exitSteps.length === 0) {
+          return null;
+        }
+        const exitFirstCoord = RouteService._getStepCoord(exitSteps, true);
+        const exitFirstCoordDist = RouteService._coordDistance(exitFirstCoord, exitCoord);
+        const EXIT_COORD_THRESHOLD = 1.0; // meters - must start within 1m of temp road exit
+        if (exitFirstCoordDist === null || exitFirstCoordDist > EXIT_COORD_THRESHOLD) {
+          return null;
+        }
         // Ensure geometry direction matches entry/exit based on direction field
         let connectingGeometry = tempRoad.geom;
         if (
