@@ -1,6 +1,5 @@
 const databaseConnection = require("../utils/database");
 
-
 class TempRoadRepository {
   constructor() {
     this.sql = databaseConnection;
@@ -11,7 +10,8 @@ class TempRoadRepository {
       const result = await this.sql`
         SELECT
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
-          length, speed, max_weight, max_height, description, created_at, updated_at
+          length, speed, max_weight, max_height, description, direction,
+          created_at, updated_at
         FROM
           temporary_routes;
       `;
@@ -30,7 +30,8 @@ class TempRoadRepository {
       const result = await this.sql`
         SELECT
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
-          length, speed, max_weight, max_height, description, created_at, updated_at
+          length, speed, max_weight, max_height, description, direction,
+          created_at, updated_at
         FROM
           temporary_routes
         WHERE
@@ -64,30 +65,34 @@ class TempRoadRepository {
     } = data;
 
     try {
-      const result = await this.sql.unsafe(`
-        INSERT INTO temporary_routes (
+      const result = await this.sql.unsafe(
+        `INSERT INTO temporary_routes (
           type, name, status, tags, geom,
-          length, speed, max_weight, max_height, description
+          length, speed, max_weight, max_height, description, direction
         )
         VALUES (
           $1, $2, $3, $4, $5,
-          $6, $7, $8, $9, $10
+          $6, $7, $8, $9, $10, $11
         )
         RETURNING
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
-          length, speed, max_weight, max_height, description, created_at, updated_at;
-      `, [
-        type,
-        name,
-        status,
-        JSON.stringify(tags),
-        geom,
-        length,
-        speed,
-        max_weight,
-        max_height,
-        description
-      ]);
+          length, speed, max_weight, max_height, description, direction,
+          created_at, updated_at;
+        `,
+        [
+          type,
+          name,
+          status,
+          JSON.stringify(tags),
+          geom,
+          length,
+          speed,
+          max_weight,
+          max_height,
+          description,
+          direction
+        ]
+      );
       const item = result[0];
       item.tags = JSON.parse(item.tags);
       item.geom = item.geom ? JSON.parse(item.geom) : null;
@@ -130,17 +135,14 @@ class TempRoadRepository {
           Array.isArray(geomObj.coordinates) &&
           geomObj.coordinates.length === 2
         ) {
-          // If any coordinate is invalid (NaN), fetch from DB and merge
           const invalids = geomObj.coordinates.map(
             c => !Array.isArray(c) || c.length !== 2 || c.some(v => typeof v !== 'number' || isNaN(v))
           );
           if (invalids.some(Boolean)) {
-            // Fetch current geom from DB
             const current = await this.getById(id);
             if (current && current.geom && current.geom.type === 'LineString' && Array.isArray(current.geom.coordinates)) {
               const mergedCoords = geomObj.coordinates.map((c, i) => {
                 if (!Array.isArray(c) || c.length !== 2 || c.some(v => typeof v !== 'number' || isNaN(v))) {
-                  // Use DB value
                   return current.geom.coordinates[i];
                 }
                 return c;
@@ -149,31 +151,22 @@ class TempRoadRepository {
               updates.geom = JSON.stringify(geomObj);
             }
           } else {
-            // All valid, stringify if needed
             updates.geom = typeof updates.geom === 'string' ? updates.geom : JSON.stringify(geomObj);
           }
         }
       } catch (e) {
-        // If parsing fails, ignore and let DB error out
+        // Ignore parsing failures
       }
     }
 
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedFields.includes(key)) continue;
-      if (key === "tags") {
-        setClauses.push(`${key} = $${idx++}`);
-        values.push(JSON.stringify(value));
-      } else if (key === "geom") {
-        setClauses.push(`${key} = $${idx++}`);
-        values.push(value);
-      } else {
-        setClauses.push(`${key} = $${idx++}`);
-        values.push(value);
-      }
-    }
-
-    if (setClauses.length === 0) {
-      throw new Error("No valid fields to update");
+      setClauses.push(
+        key === 'tags' ?
+          `${key} = $${idx++}` :
+        `${key} = $${idx++}`
+      );
+      values.push(key === 'tags' ? JSON.stringify(value) : value);
     }
 
     setClauses.push(`updated_at = NOW()`);
@@ -188,7 +181,8 @@ class TempRoadRepository {
         id = $${idx} AND ABS(EXTRACT(EPOCH FROM (updated_at - $${idx + 1}::timestamptz))) < 0.01
       RETURNING
         id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
-        length, speed, max_weight, max_height, description, created_at, updated_at;
+        length, speed, max_weight, max_height, description, direction,
+        created_at, updated_at;
     `;
 
     try {
@@ -231,7 +225,8 @@ class TempRoadRepository {
           id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01
         RETURNING
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
-          length, speed, max_weight, max_height, description, created_at, updated_at;
+          length, speed, max_weight, max_height, description, direction,
+          created_at, updated_at;
       `;
       if (!result[0]) return null;
       const item = result[0];
