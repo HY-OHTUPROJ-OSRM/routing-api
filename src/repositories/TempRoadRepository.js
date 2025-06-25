@@ -61,7 +61,7 @@ class TempRoadRepository {
       max_weight = null,
       max_height = null,
       description = null,
-      direction = 2 // two-way (default)
+      direction = 2 // bidirectional (default)
     } = data;
 
     try {

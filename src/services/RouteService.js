@@ -126,12 +126,24 @@ class RouteService {
     const normalRespPromise = fetch(urlNormal).then((r) => r.json());
 
     if (tempRoadsWithStartInBetween.length > 0) {
-      // For each temp road, try routing to both endpoints and select the best entry
+      // For each temp road, try routing to allowed endpoints based on direction
       const tempRoadPromises = tempRoadsWithStartInBetween.map(async (tempRoad, idx) => {
         const coords = tempRoad.geom.coordinates;
-        const endA = { lng: coords[0][0], lat: coords[0][1] };
-        const endB = { lng: coords[coords.length - 1][0], lat: coords[coords.length - 1][1] };
-        const tempEndCoords = [endA, endB];
+        const endA = { lng: coords[0][0], lat: coords[0][1] }; // Start coordinate (first)
+        const endB = { lng: coords[coords.length - 1][0], lat: coords[coords.length - 1][1] }; // End coordinate (last)
+        
+        // Determine allowed entry points based on direction field
+        let tempEndCoords = [];
+        if (tempRoad.direction === 0) {
+          // Direction 0: only from start to end (endA entry only)
+          tempEndCoords = [endA];
+        } else if (tempRoad.direction === 1) {
+          // Direction 1: only from end to start (endB entry only)
+          tempEndCoords = [endB];
+        } else {
+          // Direction 2 (or any other value): bidirectional (both endpoints)
+          tempEndCoords = [endA, endB];
+        }
         const routeResults = await Promise.all(tempEndCoords.map(async (entryCoord) => {
           const tempEntryCoordStr = `${entryCoord.lng},${entryCoord.lat}`;
           const url = `${BACKEND_URL}/route/v1/driving/${origStart};${tempEntryCoordStr}${urlObj.search}`;
@@ -176,8 +188,18 @@ class RouteService {
           }
         }
         const entryCoord = chosenEntry.entryCoord;
-        // The exit is the other endpoint
-        const exitCoord = (entryCoord.lng === endA.lng && entryCoord.lat === endA.lat) ? endB : endA;
+        // Determine exit coordinate based on direction and entry point
+        let exitCoord;
+        if (tempRoad.direction === 0) {
+          // Direction 0: start to end, so entry must be endA and exit is endB
+          exitCoord = endB;
+        } else if (tempRoad.direction === 1) {
+          // Direction 1: end to start, so entry must be endB and exit is endA
+          exitCoord = endA;
+        } else {
+          // Direction 2: bidirectional, exit is the other endpoint
+          exitCoord = (entryCoord.lng === endA.lng && entryCoord.lat === endA.lat) ? endB : endA;
+        }
         const tempEntryCoord = `${entryCoord.lng},${entryCoord.lat}`;
         const tempExitCoord = `${exitCoord.lng},${exitCoord.lat}`;
         const url2 = `${BACKEND_URL}/route/v1/driving/${tempExitCoord};${origEnd}${urlObj.search}`;
@@ -188,7 +210,7 @@ class RouteService {
           console.error(`[RouteService] Temp road #${idx} fetch failed for exit:`, e);
           return null;
         }
-        // Ensure geometry direction matches entry/exit
+        // Ensure geometry direction matches entry/exit based on direction field
         let connectingGeometry = tempRoad.geom;
         if (
           connectingGeometry &&
@@ -196,7 +218,20 @@ class RouteService {
           Array.isArray(connectingGeometry.coordinates)
         ) {
           const coords = connectingGeometry.coordinates;
-          if (coords.length >= 2 && (coords[0][0] !== entryCoord.lng || coords[0][1] !== entryCoord.lat)) {
+          let shouldReverse = false;
+          
+          if (tempRoad.direction === 0) {
+            // Direction 0: start to end, geometry should start with endA (first coordinate)
+            shouldReverse = coords[0][0] !== endA.lng || coords[0][1] !== endA.lat;
+          } else if (tempRoad.direction === 1) {
+            // Direction 1: end to start, geometry should start with endB (last coordinate becomes first)
+            shouldReverse = coords[0][0] !== endB.lng || coords[0][1] !== endB.lat;
+          } else {
+            // Direction 2: bidirectional, ensure geometry starts with entry coordinate
+            shouldReverse = coords.length >= 2 && (coords[0][0] !== entryCoord.lng || coords[0][1] !== entryCoord.lat);
+          }
+          
+          if (shouldReverse) {
             connectingGeometry = {
               type: "LineString",
               coordinates: coords.slice().reverse(),
