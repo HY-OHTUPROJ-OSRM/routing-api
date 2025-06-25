@@ -41,13 +41,31 @@ async function roadworkToZone(roadwork) {
   extractLines(roadwork.coordinates);
   if (lines.length === 0) return [];
 
+  // Check for speed limit restriction
+  const speedLimitRestriction = Array.isArray(roadwork.restrictions) 
+    ? roadwork.restrictions.find(r => r.type === "SPEED_LIMIT")
+    : null;
+
   // Utility for safe property values
   const safe = (v, fallback = null) => (v === undefined || v === null ? fallback : v);
+  
+  // Determine zone type and effect value based on speed limit presence
+  let zoneType, effectValue;
+  if (speedLimitRestriction && speedLimitRestriction.value && speedLimitRestriction.unit === "km/h") {
+    // Use constant type with speed limit value
+    zoneType = "constant";
+    effectValue = speedLimitRestriction.value;
+  } else {
+    // Fall back to factor type with severity-based effect value
+    zoneType = "factor";
+    effectValue = severityToEffectValue(roadwork.severity);
+  }
+
   const baseProps = {
-    type: "factor",
+    type: zoneType,
     name: safe(roadwork.title, "Roadwork"),
-    effectValue: severityToEffectValue(roadwork.severity),
-    effect_value: severityToEffectValue(roadwork.severity),
+    effectValue: effectValue,
+    effect_value: effectValue,
     source: "digitraffic",
     roadwork_id: safe(roadwork.id, null),
     roadName: safe(roadwork.roadName, ""),
