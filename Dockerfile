@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=osrm-backend:v6.0.0-debian
+ARG BASE_IMAGE=quay.io/routing-projekti/osrm-backend:v6.0.0-debian
 FROM ${BASE_IMAGE}
 
 RUN apt-get update && \
