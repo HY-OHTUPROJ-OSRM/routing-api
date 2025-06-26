@@ -111,8 +111,7 @@ class ZoneRepository {
       // Fuzzy match: allow up to 10ms difference
       const result = await this.activeSql`
         DELETE FROM zones
-        WHERE id = ANY(${filteredIds})
-        AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01;
+        WHERE id = ANY(${filteredIds});
       `;
       return result.count > 0;
     } catch (err) {
@@ -132,7 +131,7 @@ class ZoneRepository {
         const updatedAt = updatedAts[i];
         // Fuzzy match: allow up to 10ms difference
         const result = await this.activeSql`
-          DELETE FROM zones WHERE id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${updatedAt}::timestamptz))) < 0.01;
+          DELETE FROM zones WHERE id = ${id};
         `;
         if (result.count === 0) conflictIds.push(id);
       }

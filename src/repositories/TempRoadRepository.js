@@ -178,7 +178,7 @@ class TempRoadRepository {
       SET
         ${setClauses.join(",\n        ")}
       WHERE
-        id = $${idx} AND ABS(EXTRACT(EPOCH FROM (updated_at - $${idx + 1}::timestamptz))) < 0.01
+        id = $${idx}
       RETURNING
         id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
         length, speed, max_weight, max_height, description, direction,
@@ -203,7 +203,7 @@ class TempRoadRepository {
         DELETE FROM
           temporary_routes
         WHERE
-          id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01
+          id = ${id}
         RETURNING id;
       `;
       if (!result[0]) return null;
@@ -222,7 +222,7 @@ class TempRoadRepository {
           status = NOT status,
           updated_at = NOW()
         WHERE
-          id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${expectedUpdatedAt}::timestamptz))) < 0.01
+          id = ${id}
         RETURNING
           id, type, name, status, tags, ST_AsGeoJSON(geom) as geom,
           length, speed, max_weight, max_height, description, direction,

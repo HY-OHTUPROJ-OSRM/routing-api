@@ -36,7 +36,7 @@ class DisconnectionsRepository {
       UPDATE disconnected_links
       SET    temp_road_id = ${temp_road_id},
              updated_at   = NOW()
-      WHERE  id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${updated_at}::timestamptz))) < 0.01
+      WHERE  id = ${id}
       RETURNING id, temp_road_id;
     `;
   }
@@ -46,7 +46,7 @@ class DisconnectionsRepository {
       UPDATE disconnected_links
       SET hide_status = NOT hide_status,
           updated_at  = NOW()
-      WHERE id = ${id} AND ABS(EXTRACT(EPOCH FROM (updated_at - ${updated_at}::timestamptz))) < 0.01
+      WHERE id = ${id}
       RETURNING id, hide_status;
     `;
   }
