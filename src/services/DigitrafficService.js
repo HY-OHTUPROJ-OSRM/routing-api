@@ -5,26 +5,58 @@ const DATA_URL = (id) => `https://tie.digitraffic.fi/api/tms/v1/stations/${id}/d
 const ROAD_WORKS_URL =
   "https://tie.digitraffic.fi/api/traffic-message/v1/messages?inactiveHours=0&includeAreaGeometry=false&situationType=ROAD_WORK";
 
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_TTL_MS = 60 * 1000; // back off 1 min on 429
+const cache = {};
+
+function getCached(key) {
+  const entry = cache[key];
+  if (entry && Date.now() - entry.ts < CACHE_TTL_MS) return entry.data;
+  return null;
+}
+
+function setCached(key, data) {
+  cache[key] = { ts: Date.now(), data };
+}
+
+function isRateLimited(key) {
+  const entry = cache[`rl:${key}`];
+  return entry && Date.now() - entry.ts < RATE_LIMIT_TTL_MS;
+}
+
+function setRateLimited(key) {
+  cache[`rl:${key}`] = { ts: Date.now() };
+}
+
 class DigitrafficService {
   static async fetchStations() {
+    const cached = getCached("stations");
+    if (cached) return cached;
+    if (isRateLimited("stations")) return [];
     const res = await fetch(STATIONS_URL, {
       headers: {
         "Accept-Encoding": "gzip", // Required by Digitraffic ?
       },
     });
 
+    if (res.status === 429) {
+      setRateLimited("stations");
+      return [];
+    }
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Failed to fetch stations: ${res.status}\n${text}`);
     }
 
     const data = await res.json();
-    return data.features.map((station) => ({
+    const result = data.features.map((station) => ({
       id: station.id,
       name: station.properties.name,
       roadNumber: station.properties.roadNumber,
       coordinates: station.geometry.coordinates,
     }));
+    setCached("stations", result);
+    return result;
   }
 
   static async fetchHelsinkiStations() {
@@ -69,10 +101,17 @@ class DigitrafficService {
    * - Sender, versioning, and unused descriptive fields
    */
   static async fetchRoadWorks() {
+    const cached = getCached("roadworks");
+    if (cached) return cached;
+    if (isRateLimited("roadworks")) return [];
     const res = await fetch(ROAD_WORKS_URL, {
       headers: { "Accept-Encoding": "gzip" },
     });
 
+    if (res.status === 429) {
+      setRateLimited("roadworks");
+      return [];
+    }
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Failed to fetch road works: ${res.status}\n${text}`);
@@ -80,7 +119,7 @@ class DigitrafficService {
 
     const data = await res.json();
 
-    return data.features.map((feature) => {
+    const result = data.features.map((feature) => {
       const announcement = feature.properties?.announcements?.[0];
       const phase = announcement?.roadWorkPhases?.[0];
 
@@ -101,6 +140,8 @@ class DigitrafficService {
         coordinates: feature.geometry?.coordinates,
       };
     });
+    setCached("roadworks", result);
+    return result;
   }
 }
 
